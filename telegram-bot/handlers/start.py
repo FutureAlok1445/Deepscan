@@ -1,0 +1,1 @@
+async def start(u, c): await u.message.reply_text("Welcome to DeepScanBot.")\n

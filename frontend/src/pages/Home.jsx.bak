@@ -1,0 +1,729 @@
+import React, { useEffect, useRef, useState, useMemo } from 'react';
+import { Link } from 'react-router-dom';
+import { gsap } from 'gsap';
+import { ScrollTrigger } from 'gsap/ScrollTrigger';
+import {
+  Shield, Upload, Brain, Eye, BarChart3, Users, ChevronDown,
+  Zap, Lock, Layers, Globe, ArrowRight, Play, HeartPulse,
+  Mic, ScanFace, FileText, Radio, AlertTriangle, Search,
+  Fingerprint, Cpu, Activity, Waves, Scan, MonitorCheck,
+} from 'lucide-react';
+import * as THREE from 'three';
+import BrutalButton from '../components/ui/BrutalButton';
+import BrutalCard from '../components/ui/BrutalCard';
+import PaperTear from '../components/ui/PaperTear';
+import TerminalText from '../components/ui/TerminalText';
+
+gsap.registerPlugin(ScrollTrigger);
+
+/* Constants */
+const STATS = [
+  { value: '8+', label: 'Detection Engines', icon: Brain, color: '#ff3c00' },
+  { value: '99.2%', label: 'Accuracy Rate', icon: Shield, color: '#39ff14' },
+  { value: '<3s', label: 'Avg Scan Time', icon: Zap, color: '#00f5ff' },
+  { value: '8', label: 'Indian Languages', icon: Globe, color: '#ffd700' },
+];
+
+const PIPELINE_STEPS = [
+  { icon: Upload, title: 'Upload Media', desc: 'Drop any image, video, or audio file. We accept 15+ formats including WhatsApp forwards.', color: '#ff3c00' },
+  { icon: ScanFace, title: 'AI Detection', desc: 'EfficientNet-B4, DistilBERT, librosa, and 5 more engines analyze every pixel and frequency.', color: '#00f5ff' },
+  { icon: HeartPulse, title: 'rPPG Analysis', desc: 'Our secret weapon: extract heartbeat signals from video. Real faces pulse - deepfakes flatline.', color: '#39ff14' },
+  { icon: Layers, title: 'CDCF Fusion', desc: 'Cross-Domain Consistency Fusion weighs all detectors votes. Contradictions are flagged.', color: '#ffd700' },
+  { icon: Eye, title: 'Explainable Report', desc: 'Grad-CAM heatmaps, heartbeat charts, Hindi narration - see exactly WHY the AI decided.', color: '#ff3c00' },
+];
+
+const FEATURES = [
+  { icon: Zap, title: 'Multi-Modal', desc: 'Image, video, audio, and text analysis in one platform - no competitor covers all 4.', color: '#ff3c00' },
+  { icon: Lock, title: 'Privacy First', desc: 'Files are processed in-memory and deleted instantly. Nothing stored permanently.', color: '#00f5ff' },
+  { icon: Globe, title: '8 Languages', desc: 'Results narrated in Hindi, Tamil, Telugu, Bengali, Marathi, and more.', color: '#39ff14' },
+  { icon: BarChart3, title: 'Forensic Reports', desc: 'PDF reports with ELA, FFT, noise analysis, and EXIF metadata for police complaints.', color: '#ffd700' },
+  { icon: Users, title: 'Community Alerts', desc: 'Crowdsourced database of known deepfakes circulating in India.', color: '#ff3c00' },
+  { icon: Radio, title: 'Telegram Bot', desc: 'Forward any media to @DeepScanBot for instant 30-second verification.', color: '#00f5ff' },
+];
+
+const AACS_FORMULA = [
+  { label: 'MAS', weight: '0.30', color: '#ff3c00', desc: 'Media Authenticity', icon: ScanFace },
+  { label: 'PPS', weight: '0.25', color: '#39ff14', desc: 'Physiological', icon: HeartPulse },
+  { label: 'IRS', weight: '0.20', color: '#00f5ff', desc: 'Information', icon: FileText },
+  { label: 'AAS', weight: '0.15', color: '#ffd700', desc: 'Audio Authenticity', icon: Mic },
+  { label: 'CVS', weight: '0.10', color: '#e0e0e0', desc: 'Context Verification', icon: Search },
+];
+
+const THREAT_CASES = [
+  { icon: AlertTriangle, title: 'CEO Voice Clone', desc: 'Fake CFO call - Rs 8 Cr transferred, Mumbai 2024', color: '#ff3c00', defense: 'AAS Score detects synthetic voice markers' },
+  { icon: Fingerprint, title: 'Aadhaar Face Swap', desc: 'AI-generated Aadhaar used for Rs 50L loan fraud', color: '#ffd700', defense: 'EfficientNet-B4 + ELA catches face artifacts' },
+  { icon: Waves, title: 'WhatsApp Scam Video', desc: 'PM Modi fake video - 2M shares in 6 hours', color: '#00f5ff', defense: 'Multi-modal scan + Telegram Bot verdicts' },
+  { icon: MonitorCheck, title: 'Evidence Tampering', desc: 'Edited CCTV footage submitted as legal evidence', color: '#39ff14', defense: 'PDF forensic report + EXIF metadata analysis' },
+];
+
+export default function Home() {
+  const containerRef = useRef(null);
+
+  useEffect(() => {
+    const ctx = gsap.context(() => {
+      gsap.utils.toArray('.gs-reveal').forEach((el) => {
+        gsap.from(el, {
+          y: 60, opacity: 0, duration: 0.8, ease: 'power3.out',
+          scrollTrigger: { trigger: el, start: 'top 85%', once: true },
+        });
+      });
+
+      gsap.utils.toArray('.gs-stat').forEach((el, i) => {
+        gsap.from(el, {
+          scale: 0.8, opacity: 0, duration: 0.5, delay: i * 0.1,
+          ease: 'back.out(1.7)',
+          scrollTrigger: { trigger: el, start: 'top 90%', once: true },
+        });
+      });
+
+      gsap.from('.gs-pipeline-step', {
+        x: -80, opacity: 0, duration: 0.6, stagger: 0.15, ease: 'power3.out',
+        scrollTrigger: { trigger: '.gs-pipeline-container', start: 'top 80%', once: true },
+      });
+
+      gsap.from('.gs-feature-card', {
+        y: 40, opacity: 0, rotateX: 15, duration: 0.6, stagger: 0.1, ease: 'power3.out',
+        scrollTrigger: { trigger: '.gs-features-container', start: 'top 80%', once: true },
+      });
+
+      gsap.from('.gs-formula-block', {
+        scale: 0, opacity: 0, duration: 0.4, stagger: 0.08, ease: 'back.out(2)',
+        scrollTrigger: { trigger: '.gs-formula-container', start: 'top 85%', once: true },
+      });
+
+      gsap.from('.gs-threat-card', {
+        x: 80, opacity: 0, duration: 0.5, stagger: 0.12, ease: 'power3.out',
+        scrollTrigger: { trigger: '.gs-threats-container', start: 'top 80%', once: true },
+      });
+
+      gsap.from('.gs-demo-element', {
+        scale: 0.9, opacity: 0, duration: 0.6, stagger: 0.1, ease: 'power2.out',
+        scrollTrigger: { trigger: '.gs-demo-container', start: 'top 80%', once: true },
+      });
+    }, containerRef);
+
+    return () => ctx.revert();
+  }, []);
+
+  return (
+    <div ref={containerRef} className="min-h-screen bg-ds-bg text-ds-silver overflow-hidden">
+      <HeroSection />
+      <PaperTear />
+
+      {/* THE PROBLEM */}
+      <section className="py-20 px-4 sm:px-6 lg:px-8 max-w-6xl mx-auto">
+        <div className="gs-reveal text-center mb-16">
+          <p className="text-xs font-mono text-ds-red uppercase tracking-[0.3em] mb-3">// THE THREAT</p>
+          <h2 className="text-3xl md:text-5xl font-grotesk font-black leading-tight">
+            India Faces a <span className="text-ds-red neon-red">Deepfake Crisis</span>
+          </h2>
+          <p className="mt-4 max-w-2xl mx-auto text-ds-silver/60 font-mono text-sm leading-relaxed">
+            Rs 7,061 Cr lost to cyber fraud in 2023. Over 40% involved AI-manipulated media.
+            The deepfake market is growing at 37.45% CAGR - our defense must accelerate.
+          </p>
+        </div>
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+          {[
+            { stat: '96%', desc: "of Indians can not detect deepfakes", color: '#ff3c00' },
+            { stat: 'Rs 7,061Cr', desc: 'lost to cyber fraud in 2023', color: '#ffd700' },
+            { stat: '500%', desc: 'increase in deepfake content', color: '#ff3c00' },
+          ].map((item, i) => (
+            <div key={i} className="gs-stat">
+              <div className="text-center py-10 px-6 border-3 border-ds-silver/20 bg-ds-card relative overflow-hidden brutal-shadow card-hover-lift">
+                <div className="absolute inset-0 bg-gradient-to-br from-transparent via-transparent to-ds-red/5" />
+                <div className="absolute top-0 left-0 w-full h-1" style={{ background: item.color }} />
+                <p className="text-5xl font-grotesk font-black relative z-10" style={{ color: item.color }}>{item.stat}</p>
+                <p className="mt-3 text-sm font-mono text-ds-silver/60 relative z-10">{item.desc}</p>
+              </div>
+            </div>
+          ))}
+        </div>
+      </section>
+
+      <PaperTear flip />
+
+      {/* LIVE DEMO PREVIEW */}
+      <section className="py-20 px-4 sm:px-6 lg:px-8 max-w-6xl mx-auto">
+        <div className="gs-reveal text-center mb-12">
+          <p className="text-xs font-mono text-ds-cyan uppercase tracking-[0.3em] mb-3">// LIVE ANALYSIS PREVIEW</p>
+          <h2 className="text-3xl md:text-5xl font-grotesk font-black leading-tight">
+            See <span className="text-ds-cyan neon-cyan">DeepScan</span> in Action
+          </h2>
+          <p className="mt-4 max-w-2xl mx-auto text-ds-silver/60 font-mono text-sm">
+            This is what happens when you scan a deepfake video - 8 engines working in parallel.
+          </p>
+        </div>
+        <div className="gs-demo-container">
+          <MockAnalysisDemo />
+        </div>
+      </section>
+
+      <PaperTear />
+
+      {/* DETECTION PIPELINE */}
+      <section className="py-20 px-4 sm:px-6 lg:px-8 max-w-6xl mx-auto">
+        <div className="gs-reveal text-center mb-16">
+          <p className="text-xs font-mono text-ds-cyan uppercase tracking-[0.3em] mb-3">// DETECTION PIPELINE</p>
+          <h2 className="text-3xl md:text-5xl font-grotesk font-black leading-tight">
+            Five Steps to <span className="text-ds-cyan neon-cyan">Truth</span>
+          </h2>
+        </div>
+        <div className="gs-pipeline-container space-y-4">
+          {PIPELINE_STEPS.map((step, i) => (
+            <div key={i} className="gs-pipeline-step">
+              <div
+                className="flex items-start gap-6 p-6 border-3 border-ds-silver/20 bg-ds-card hover:border-ds-silver/40 transition-all group relative overflow-hidden card-hover-lift"
+                style={{ borderLeftColor: step.color, borderLeftWidth: 4 }}
+              >
+                <div className="absolute inset-0 opacity-0 group-hover:opacity-100 transition-opacity duration-500"
+                  style={{ background: 'linear-gradient(90deg, ' + step.color + '10, transparent)' }} />
+                <div className="flex-shrink-0 relative z-10 flex items-center justify-center w-14 h-14 border-3 border-ds-silver/30" style={{ color: step.color }}>
+                  <step.icon className="w-7 h-7" />
+                </div>
+                <div className="relative z-10 flex-1">
+                  <div className="flex items-center gap-3">
+                    <span className="font-mono text-xs" style={{ color: step.color }}>STEP {String(i + 1).padStart(2, '0')}</span>
+                    <h3 className="font-grotesk font-bold text-lg">{step.title}</h3>
+                  </div>
+                  <p className="text-sm font-mono text-ds-silver/60 leading-relaxed mt-1">{step.desc}</p>
+                </div>
+                <div className="hidden md:flex items-center">
+                  {i < PIPELINE_STEPS.length - 1 && (
+                    <ArrowRight className="w-5 h-5 text-ds-silver/20" />
+                  )}
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+      </section>
+
+      <PaperTear flip />
+
+      {/* AACS FORMULA */}
+      <section className="py-20 px-4 sm:px-6 lg:px-8 max-w-5xl mx-auto">
+        <div className="gs-reveal text-center mb-12">
+          <p className="text-xs font-mono text-ds-green uppercase tracking-[0.3em] mb-3">// SCORING ENGINE</p>
+          <h2 className="text-3xl md:text-5xl font-grotesk font-black leading-tight">
+            AACS <span className="text-ds-green neon-green">Formula</span>
+          </h2>
+          <p className="mt-4 text-sm font-mono text-ds-silver/50 max-w-xl mx-auto">
+            AI Authenticity Confidence Score - a weighted fusion of 5 sub-scores, multiplied by the CDCF contradiction penalty.
+          </p>
+        </div>
+        <div className="gs-formula-container">
+          <div className="gs-reveal text-center mb-10 p-6 border-3 border-ds-green/30 bg-ds-card relative overflow-hidden">
+            <div className="absolute inset-0 cyber-grid opacity-30" />
+            <p className="font-mono text-lg md:text-xl text-ds-silver relative z-10">
+              AACS = (<span className="text-ds-red font-bold">0.30</span> x MAS + <span className="text-ds-green font-bold">0.25</span> x PPS + <span className="text-ds-cyan font-bold">0.20</span> x IRS + <span className="text-ds-yellow font-bold">0.15</span> x AAS + <span className="text-ds-silver font-bold">0.10</span> x CVS) x <span className="text-ds-red font-bold">CDCF</span>
+            </p>
+          </div>
+          <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
+            {AACS_FORMULA.map((item) => (
+              <div key={item.label} className="gs-formula-block text-center p-5 border-3 border-ds-silver/20 bg-ds-card hover:scale-105 transition-transform card-hover-lift relative overflow-hidden">
+                <div className="absolute inset-0 opacity-10" style={{ background: 'radial-gradient(circle at bottom, ' + item.color + ', transparent 70%)' }} />
+                <item.icon className="w-6 h-6 mx-auto mb-2 relative z-10" style={{ color: item.color }} />
+                <p className="text-3xl font-grotesk font-black relative z-10" style={{ color: item.color }}>{item.weight}</p>
+                <p className="font-mono text-sm font-bold mt-1 relative z-10" style={{ color: item.color }}>{item.label}</p>
+                <p className="text-xs font-mono text-ds-silver/40 mt-1 relative z-10">{item.desc}</p>
+              </div>
+            ))}
+          </div>
+          <div className="gs-reveal mt-8 grid grid-cols-2 md:grid-cols-4 gap-3">
+            {[
+              { range: '0-30', label: 'AUTHENTIC', color: '#39ff14', bg: 'rgba(57,255,20,0.1)' },
+              { range: '31-60', label: 'UNCERTAIN', color: '#ffd700', bg: 'rgba(255,215,0,0.1)' },
+              { range: '61-85', label: 'LIKELY FAKE', color: '#ff8c00', bg: 'rgba(255,140,0,0.1)' },
+              { range: '86-100', label: 'DEFINITELY FAKE', color: '#ff3c00', bg: 'rgba(255,60,0,0.1)' },
+            ].map((v) => (
+              <div key={v.label} className="p-4 border-3 text-center relative overflow-hidden card-hover-lift" style={{ borderColor: v.color, background: v.bg }}>
+                <p className="font-grotesk font-black text-2xl" style={{ color: v.color }}>{v.range}</p>
+                <p className="font-mono text-xs mt-1 font-bold" style={{ color: v.color }}>{v.label}</p>
+              </div>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      <PaperTear />
+
+      {/* FEATURES */}
+      <section className="py-20 px-4 sm:px-6 lg:px-8 max-w-6xl mx-auto">
+        <div className="gs-reveal text-center mb-16">
+          <p className="text-xs font-mono text-ds-yellow uppercase tracking-[0.3em] mb-3">// CAPABILITIES</p>
+          <h2 className="text-3xl md:text-5xl font-grotesk font-black leading-tight">
+            Built for <span className="text-ds-yellow neon-yellow">India</span>
+          </h2>
+        </div>
+        <div className="gs-features-container grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+          {FEATURES.map((feat, i) => (
+            <div key={i} className="gs-feature-card" style={{ perspective: '800px' }}>
+              <div className="h-full p-6 border-3 border-ds-silver/20 bg-ds-card group relative overflow-hidden card-hover-lift">
+                <div className="absolute top-0 right-0 w-24 h-24 opacity-10"
+                  style={{ background: 'radial-gradient(circle, ' + feat.color + ', transparent)' }} />
+                <div className="absolute top-0 left-0 w-full h-1" style={{ background: feat.color }} />
+                <feat.icon className="w-8 h-8 mb-3 group-hover:scale-110 transition-transform" style={{ color: feat.color }} />
+                <h3 className="font-grotesk font-bold text-lg mb-2">{feat.title}</h3>
+                <p className="text-sm font-mono text-ds-silver/60 leading-relaxed">{feat.desc}</p>
+              </div>
+            </div>
+          ))}
+        </div>
+      </section>
+
+      <PaperTear flip />
+
+      {/* THREAT INTELLIGENCE */}
+      <section className="py-20 px-4 sm:px-6 lg:px-8 max-w-6xl mx-auto">
+        <div className="gs-reveal text-center mb-16">
+          <p className="text-xs font-mono text-ds-red uppercase tracking-[0.3em] mb-3">// THREAT INTELLIGENCE</p>
+          <h2 className="text-3xl md:text-5xl font-grotesk font-black leading-tight">
+            Real <span className="text-ds-red neon-red">Indian</span> Cyber Threats
+          </h2>
+          <p className="mt-4 text-sm font-mono text-ds-silver/50 max-w-xl mx-auto">
+            Every feature maps to a documented cyber fraud case in India.
+          </p>
+        </div>
+        <div className="gs-threats-container grid grid-cols-1 md:grid-cols-2 gap-6">
+          {THREAT_CASES.map((threat, i) => (
+            <div key={i} className="gs-threat-card">
+              <div className="p-6 border-3 border-ds-silver/20 bg-ds-card relative overflow-hidden group card-hover-lift">
+                <div className="absolute top-0 left-0 w-1 h-full" style={{ background: threat.color }} />
+                <div className="flex items-start gap-4">
+                  <div className="flex-shrink-0 w-12 h-12 flex items-center justify-center border-3 border-ds-silver/20" style={{ color: threat.color }}>
+                    <threat.icon className="w-6 h-6" />
+                  </div>
+                  <div className="flex-1">
+                    <h3 className="font-grotesk font-bold text-base mb-1" style={{ color: threat.color }}>{threat.title}</h3>
+                    <p className="text-xs font-mono text-ds-silver/50 mb-3">{threat.desc}</p>
+                    <div className="p-2 bg-ds-bg border border-ds-silver/10">
+                      <p className="text-xs font-mono text-ds-green">{threat.defense}</p>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+      </section>
+
+      <PaperTear />
+
+      {/* RPPG SECRET WEAPON */}
+      <section className="py-20 px-4 sm:px-6 lg:px-8 max-w-5xl mx-auto">
+        <div className="gs-reveal text-center mb-12">
+          <p className="text-xs font-mono text-ds-green uppercase tracking-[0.3em] mb-3">// SECRET WEAPON</p>
+          <h2 className="text-3xl md:text-5xl font-grotesk font-black leading-tight">
+            <span className="text-ds-green neon-green">Heartbeat</span> Detection
+          </h2>
+          <p className="mt-4 text-sm font-mono text-ds-silver/50 max-w-xl mx-auto">
+            No other tool in India uses rPPG (Remote Photoplethysmography) to detect deepfakes.
+          </p>
+        </div>
+        <div className="gs-reveal grid grid-cols-1 md:grid-cols-2 gap-8 items-center">
+          <div className="space-y-4">
+            <p className="text-sm font-mono text-ds-silver/70 leading-relaxed">
+              Real human faces exhibit subtle color changes caused by blood flow - invisible to the naked eye,
+              but detectable by our <span className="text-ds-green font-bold">rPPG engine</span>.
+            </p>
+            <p className="text-sm font-mono text-ds-silver/70 leading-relaxed">
+              Deepfake-generated faces have <span className="text-ds-red font-bold">no heartbeat signal</span> -
+              they flatline. This is one of the most powerful and hardest-to-fake detection signals.
+            </p>
+            <div className="flex gap-4 mt-6">
+              <div className="flex-1 p-4 border-3 border-ds-green/30 bg-ds-green/5 text-center neon-box-green">
+                <HeartPulse className="w-8 h-8 text-ds-green mx-auto mb-2" />
+                <p className="font-grotesk font-bold text-ds-green">Real Face</p>
+                <p className="text-xs font-mono text-ds-silver/50 mt-1">72 BPM detected</p>
+              </div>
+              <div className="flex-1 p-4 border-3 border-ds-red/30 bg-ds-red/5 text-center neon-box-red">
+                <HeartPulse className="w-8 h-8 text-ds-red mx-auto mb-2" />
+                <p className="font-grotesk font-bold text-ds-red">Deepfake</p>
+                <p className="text-xs font-mono text-ds-silver/50 mt-1">FLATLINE - 0 BPM</p>
+              </div>
+            </div>
+          </div>
+          <HeartbeatVisual />
+        </div>
+      </section>
+
+      <PaperTear flip />
+
+      {/* CTA */}
+      <section className="py-24 px-4 sm:px-6 lg:px-8 relative">
+        <div className="absolute inset-0 cyber-grid opacity-20" />
+        <div className="absolute inset-0" style={{ background: 'radial-gradient(ellipse at center, rgba(255,60,0,0.05), transparent 70%)' }} />
+        <div className="gs-reveal max-w-3xl mx-auto text-center relative z-10">
+          <p className="text-xs font-mono text-ds-red uppercase tracking-[0.3em] mb-3">// TAKE ACTION</p>
+          <h2 className="text-4xl md:text-6xl font-grotesk font-black leading-tight">
+            Do Not Get <span className="text-ds-red neon-red">Fooled</span>
+          </h2>
+          <p className="mt-4 text-ds-silver/60 font-mono text-sm max-w-xl mx-auto leading-relaxed">
+            Upload any suspicious media and get a detailed AI-powered analysis in seconds.
+            Free. Private. Made in India.
+          </p>
+          <div className="mt-8 flex flex-col sm:flex-row gap-4 justify-center">
+            <BrutalButton as={Link} to="/analyze" size="lg">
+              <Upload className="w-5 h-5" /> Start Scanning
+            </BrutalButton>
+            <BrutalButton as={Link} to="/learn" variant="secondary" size="lg">
+              <Play className="w-5 h-5" /> Learn More
+            </BrutalButton>
+          </div>
+          <p className="mt-6 text-xs font-mono text-ds-silver/30">
+            Team Bug Bytes - HackHive 2.0 - Datta Meghe College of Engineering, Airoli
+          </p>
+        </div>
+      </section>
+    </div>
+  );
+}
+
+
+/* THREE.JS HERO WITH PARTICLES */
+function HeroSection() {
+  const mountRef = useRef(null);
+  const heroRef = useRef(null);
+  const [showStats, setShowStats] = useState(false);
+
+  useEffect(() => {
+    const mount = mountRef.current;
+    if (!mount) return;
+
+    const scene = new THREE.Scene();
+    const camera = new THREE.PerspectiveCamera(75, mount.clientWidth / mount.clientHeight, 0.1, 1000);
+    const renderer = new THREE.WebGLRenderer({ alpha: true, antialias: true });
+    renderer.setSize(mount.clientWidth, mount.clientHeight);
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+    mount.appendChild(renderer.domElement);
+
+    const particleCount = 200;
+    const positions = new Float32Array(particleCount * 3);
+    const colors = new Float32Array(particleCount * 3);
+    const velocities = [];
+
+    for (let i = 0; i < particleCount; i++) {
+      positions[i * 3] = (Math.random() - 0.5) * 24;
+      positions[i * 3 + 1] = (Math.random() - 0.5) * 24;
+      positions[i * 3 + 2] = (Math.random() - 0.5) * 12;
+      const r = Math.random();
+      if (r < 0.35) { colors[i*3]=1; colors[i*3+1]=0.24; colors[i*3+2]=0; }
+      else if (r < 0.55) { colors[i*3]=0; colors[i*3+1]=0.96; colors[i*3+2]=1; }
+      else if (r < 0.7) { colors[i*3]=0.22; colors[i*3+1]=1; colors[i*3+2]=0.08; }
+      else { colors[i*3]=0.88; colors[i*3+1]=0.88; colors[i*3+2]=0.88; }
+      velocities.push({
+        x: (Math.random()-0.5)*0.012,
+        y: (Math.random()-0.5)*0.012,
+        z: (Math.random()-0.5)*0.006,
+      });
+    }
+
+    const geometry = new THREE.BufferGeometry();
+    geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+    geometry.setAttribute('color', new THREE.BufferAttribute(colors, 3));
+    const material = new THREE.PointsMaterial({ size: 0.08, vertexColors: true, transparent: true, opacity: 0.85, sizeAttenuation: true });
+    const points = new THREE.Points(geometry, material);
+    scene.add(points);
+
+    const lineGeo = new THREE.BufferGeometry();
+    const maxLines = particleCount * 6;
+    const linePositions = new Float32Array(maxLines * 6);
+    lineGeo.setAttribute('position', new THREE.BufferAttribute(linePositions, 3));
+    const lineMat = new THREE.LineBasicMaterial({ color: 0xff3c00, transparent: true, opacity: 0.08 });
+    const lines = new THREE.LineSegments(lineGeo, lineMat);
+    scene.add(lines);
+
+    camera.position.z = 9;
+
+    let mouseX = 0, mouseY = 0;
+    const onMouseMove = (e) => {
+      mouseX = (e.clientX / window.innerWidth - 0.5) * 2;
+      mouseY = (e.clientY / window.innerHeight - 0.5) * 2;
+    };
+    window.addEventListener('mousemove', onMouseMove);
+
+    let frame;
+    const animate = () => {
+      frame = requestAnimationFrame(animate);
+      const pos = geometry.attributes.position.array;
+      for (let i = 0; i < particleCount; i++) {
+        pos[i*3] += velocities[i].x;
+        pos[i*3+1] += velocities[i].y;
+        pos[i*3+2] += velocities[i].z;
+        if (Math.abs(pos[i*3]) > 12) velocities[i].x *= -1;
+        if (Math.abs(pos[i*3+1]) > 12) velocities[i].y *= -1;
+        if (Math.abs(pos[i*3+2]) > 6) velocities[i].z *= -1;
+      }
+      geometry.attributes.position.needsUpdate = true;
+
+      let lineIdx = 0;
+      const lpos = lineGeo.attributes.position.array;
+      for (let i = 0; i < particleCount && lineIdx < maxLines * 6; i++) {
+        for (let j = i + 1; j < particleCount && lineIdx < maxLines * 6; j++) {
+          const dx = pos[i*3] - pos[j*3];
+          const dy = pos[i*3+1] - pos[j*3+1];
+          const dz = pos[i*3+2] - pos[j*3+2];
+          const dist = dx*dx + dy*dy + dz*dz;
+          if (dist < 6) {
+            lpos[lineIdx++] = pos[i*3]; lpos[lineIdx++] = pos[i*3+1]; lpos[lineIdx++] = pos[i*3+2];
+            lpos[lineIdx++] = pos[j*3]; lpos[lineIdx++] = pos[j*3+1]; lpos[lineIdx++] = pos[j*3+2];
+          }
+        }
+      }
+      lineGeo.setDrawRange(0, lineIdx / 3);
+      lineGeo.attributes.position.needsUpdate = true;
+
+      camera.position.x += (mouseX * 0.5 - camera.position.x) * 0.02;
+      camera.position.y += (-mouseY * 0.5 - camera.position.y) * 0.02;
+      camera.lookAt(0, 0, 0);
+      points.rotation.y += 0.0008;
+      renderer.render(scene, camera);
+    };
+    animate();
+
+    const onResize = () => {
+      camera.aspect = mount.clientWidth / mount.clientHeight;
+      camera.updateProjectionMatrix();
+      renderer.setSize(mount.clientWidth, mount.clientHeight);
+    };
+    window.addEventListener('resize', onResize);
+
+    const hero = heroRef.current;
+    if (hero) {
+      gsap.from(hero.querySelector('.hero-badge'), { y: -30, opacity: 0, duration: 0.6, delay: 0.3, ease: 'power3.out' });
+      gsap.from(hero.querySelector('.hero-title'), { y: 80, opacity: 0, duration: 1, delay: 0.5, ease: 'power3.out' });
+      gsap.from(hero.querySelector('.hero-subtitle'), { y: 30, opacity: 0, duration: 0.7, delay: 0.8, ease: 'power3.out' });
+      gsap.from(hero.querySelector('.hero-terminal'), { y: 30, opacity: 0, duration: 0.6, delay: 1.0, ease: 'power3.out' });
+      gsap.from(hero.querySelector('.hero-cta'), { y: 20, opacity: 0, duration: 0.6, delay: 1.4, ease: 'power3.out' });
+    }
+
+    return () => {
+      cancelAnimationFrame(frame);
+      window.removeEventListener('mousemove', onMouseMove);
+      window.removeEventListener('resize', onResize);
+      if (mount.contains(renderer.domElement)) mount.removeChild(renderer.domElement);
+      geometry.dispose(); material.dispose(); lineGeo.dispose(); lineMat.dispose();
+      renderer.dispose();
+    };
+  }, []);
+
+  return (
+    <section ref={heroRef} className="relative min-h-screen flex items-center justify-center px-4 sm:px-6 overflow-hidden">
+      <div ref={mountRef} className="absolute inset-0" style={{ zIndex: 0 }} />
+      <div className="absolute inset-0 cyber-grid" style={{ zIndex: 1 }} />
+      <div className="absolute inset-0" style={{ zIndex: 2, background: 'radial-gradient(ellipse at center, transparent 30%, #0a0a0f 75%)' }} />
+      <div className="absolute inset-0 pointer-events-none" style={{ zIndex: 3, background: 'repeating-linear-gradient(0deg, transparent, transparent 2px, rgba(255,60,0,0.015) 2px, rgba(255,60,0,0.015) 4px)' }} />
+
+      <div className="relative text-center max-w-5xl" style={{ zIndex: 10 }}>
+        <div className="hero-badge inline-flex items-center gap-2 px-5 py-2 border-3 border-ds-red/50 bg-ds-red/10 mb-8 backdrop-blur-sm">
+          <span className="w-2 h-2 bg-ds-red rounded-full animate-pulse" />
+          <span className="text-xs font-mono text-ds-red uppercase tracking-widest">
+            HackHive 2.0 - Cybersecurity - PS-03 - Team Bug Bytes
+          </span>
+          <span className="w-2 h-2 bg-ds-red rounded-full animate-pulse" />
+        </div>
+
+        <h1 className="hero-title text-6xl sm:text-8xl md:text-9xl font-grotesk font-black leading-[0.85] tracking-tight">
+          <span className="text-ds-silver drop-shadow-[0_0_30px_rgba(224,224,224,0.3)]">DEEP</span>
+          <span className="text-ds-red neon-red">[</span>
+          <span className="text-ds-silver drop-shadow-[0_0_30px_rgba(224,224,224,0.3)]">SCAN</span>
+          <span className="text-ds-red neon-red">]</span>
+        </h1>
+
+        <p className="hero-subtitle mt-4 text-base md:text-lg font-mono text-ds-silver/70 tracking-wider">
+          India's First Multi-Modal AI Deepfake Detection Engine
+        </p>
+
+        <div className="hero-terminal mt-8 inline-block bg-ds-card/90 backdrop-blur-sm border-3 border-ds-silver/30 px-6 py-3 brutal-shadow">
+          <div className="flex items-center gap-2 mb-1 text-left">
+            <span className="w-3 h-3 rounded-full bg-ds-red" />
+            <span className="w-3 h-3 rounded-full bg-ds-yellow" />
+            <span className="w-3 h-3 rounded-full bg-ds-green" />
+            <span className="text-[10px] font-mono text-ds-silver/30 ml-2">deepscan@terminal</span>
+          </div>
+          <div className="text-left">
+            <span className="text-ds-green font-mono text-xs">$</span>{' '}
+            <TerminalText
+              text="Scanning with 8 AI engines + rPPG heartbeat analysis + CDCF fusion..."
+              speed={22}
+              onComplete={() => setShowStats(true)}
+            />
+          </div>
+        </div>
+
+        {showStats && (
+          <div className="mt-10 grid grid-cols-2 md:grid-cols-4 gap-4 max-w-3xl mx-auto">
+            {STATS.map((s, i) => (
+              <div key={i} className="gs-stat text-center p-4 border-3 border-ds-silver/10 bg-ds-card/80 backdrop-blur-sm card-hover-lift">
+                <s.icon className="w-5 h-5 mx-auto mb-2" style={{ color: s.color }} />
+                <p className="text-2xl md:text-3xl font-grotesk font-black" style={{ color: s.color }}>{s.value}</p>
+                <p className="text-[10px] font-mono text-ds-silver/50 mt-1">{s.label}</p>
+              </div>
+            ))}
+          </div>
+        )}
+
+        <div className="hero-cta mt-12 flex flex-col sm:flex-row gap-4 justify-center">
+          <BrutalButton as={Link} to="/analyze" size="lg">
+            <Shield className="w-5 h-5" /> Scan Media Now
+          </BrutalButton>
+          <BrutalButton as={Link} to="/learn" variant="secondary" size="lg">
+            <ArrowRight className="w-5 h-5" /> How It Works
+          </BrutalButton>
+        </div>
+
+        <div className="mt-16 animate-bounce">
+          <ChevronDown className="w-6 h-6 text-ds-silver/30 mx-auto" />
+        </div>
+      </div>
+    </section>
+  );
+}
+
+
+/* MOCK ANALYSIS DEMO */
+function MockAnalysisDemo() {
+  const gaugeRef = useRef(null);
+  const [animScore, setAnimScore] = useState(0);
+
+  useEffect(() => {
+    const observer = new IntersectionObserver(([entry]) => {
+      if (entry.isIntersecting) {
+        let current = 0;
+        const target = 89;
+        const interval = setInterval(() => {
+          current += 1;
+          setAnimScore(current);
+          if (current >= target) clearInterval(interval);
+        }, 20);
+        observer.disconnect();
+      }
+    }, { threshold: 0.3 });
+    if (gaugeRef.current) observer.observe(gaugeRef.current);
+    return () => observer.disconnect();
+  }, []);
+
+  const scoreColor = animScore >= 70 ? '#ff3c00' : animScore >= 40 ? '#ffd700' : '#39ff14';
+  const circumference = 2 * Math.PI * 60;
+  const dashOffset = circumference - (animScore / 100) * circumference;
+
+  return (
+    <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+      <div ref={gaugeRef} className="gs-demo-element border-3 border-ds-silver/20 bg-ds-card p-8 flex flex-col items-center justify-center card-hover-lift">
+        <div className="relative">
+          <svg width="160" height="160" viewBox="0 0 140 140">
+            <circle cx="70" cy="70" r="60" fill="none" stroke="#1a1a2e" strokeWidth="10" />
+            <circle cx="70" cy="70" r="60" fill="none" stroke={scoreColor} strokeWidth="10"
+              strokeLinecap="round" strokeDasharray={circumference} strokeDashoffset={dashOffset}
+              transform="rotate(-90 70 70)" style={{ transition: 'stroke-dashoffset 0.3s ease, stroke 0.3s ease' }} />
+          </svg>
+          <div className="absolute inset-0 flex flex-col items-center justify-center">
+            <span className="text-4xl font-grotesk font-black" style={{ color: scoreColor }}>{animScore}%</span>
+            <span className="text-[10px] font-mono text-ds-silver/50 uppercase">AACS Score</span>
+          </div>
+        </div>
+        <div className="mt-4 px-4 py-2 border-3 bg-ds-red/10 border-ds-red text-center">
+          <span className="text-xs font-mono font-bold text-ds-red">DEFINITELY FAKE</span>
+        </div>
+      </div>
+
+      <div className="gs-demo-element border-3 border-ds-silver/20 bg-ds-card p-6 card-hover-lift">
+        <h3 className="text-xs font-mono text-ds-cyan uppercase tracking-wider mb-4">Key Findings</h3>
+        <div className="space-y-3">
+          {[
+            { severity: 'high', text: 'Lip-sync offset: 4 frames', engine: 'VIDEO', color: '#ff3c00' },
+            { severity: 'high', text: 'Synthetic voice: 92% TTS', engine: 'AUDIO', color: '#ff3c00' },
+            { severity: 'high', text: 'ELA anomaly: cheek region', engine: 'IMAGE', color: '#ff3c00' },
+            { severity: 'medium', text: 'EXIF metadata inconsistent', engine: 'META', color: '#ffd700' },
+            { severity: 'low', text: 'FFT: unnatural patterns', engine: 'FREQ', color: '#00f5ff' },
+          ].map((f, i) => (
+            <div key={i} className="flex items-center gap-3 p-2 bg-ds-bg border border-ds-silver/10">
+              <div className="w-2 h-2 rounded-full flex-shrink-0" style={{ background: f.color }} />
+              <span className="text-xs font-mono text-ds-silver/70 flex-1">{f.text}</span>
+              <span className="text-[9px] font-mono px-2 py-0.5 border" style={{ borderColor: f.color, color: f.color }}>{f.engine}</span>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      <div className="gs-demo-element space-y-4">
+        <div className="border-3 border-ds-silver/20 bg-ds-card p-6 card-hover-lift">
+          <h3 className="text-xs font-mono text-ds-green uppercase tracking-wider mb-4">Sub-Scores</h3>
+          <div className="space-y-3">
+            {[
+              { label: 'MAS', score: 87, color: '#ff3c00' },
+              { label: 'PPS', score: 92, color: '#39ff14' },
+              { label: 'IRS', score: 84, color: '#00f5ff' },
+              { label: 'AAS', score: 91, color: '#ffd700' },
+              { label: 'CVS', score: 76, color: '#e0e0e0' },
+            ].map((s) => (
+              <div key={s.label} className="flex items-center gap-3">
+                <span className="text-xs font-mono w-8 font-bold" style={{ color: s.color }}>{s.label}</span>
+                <div className="flex-1 h-2 bg-ds-bg border border-ds-silver/10 overflow-hidden">
+                  <div className="h-full transition-all duration-1000" style={{ width: s.score + '%', background: s.color }} />
+                </div>
+                <span className="text-xs font-mono w-10 text-right" style={{ color: s.color }}>{s.score}%</span>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        <div className="border-3 border-ds-silver/20 bg-ds-card p-6 card-hover-lift">
+          <h3 className="text-xs font-mono text-ds-red uppercase tracking-wider mb-3">ELA Heatmap</h3>
+          <div className="relative w-full h-24 bg-ds-bg border border-ds-silver/10 overflow-hidden">
+            <div className="absolute w-12 h-10 rounded-full animate-pulse" style={{ top: '20%', left: '30%', background: 'radial-gradient(circle, rgba(255,60,0,0.6), transparent)' }} />
+            <div className="absolute w-8 h-8 rounded-full animate-pulse" style={{ top: '40%', left: '55%', background: 'radial-gradient(circle, rgba(255,60,0,0.4), transparent)', animationDelay: '0.5s' }} />
+            <div className="absolute w-6 h-6 rounded-full animate-pulse" style={{ top: '15%', left: '20%', background: 'radial-gradient(circle, rgba(255,215,0,0.3), transparent)', animationDelay: '1s' }} />
+            <div className="absolute inset-0 flex items-center justify-center">
+              <span className="text-[10px] font-mono text-ds-silver/30 bg-ds-bg/70 px-2">Manipulation zones detected</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+
+/* HEARTBEAT SVG VISUAL */
+function HeartbeatVisual() {
+  const svgRef = useRef(null);
+
+  useEffect(() => {
+    const svg = svgRef.current;
+    if (!svg) return;
+    const path = svg.querySelector('.real-line');
+    if (path) {
+      const length = path.getTotalLength();
+      gsap.set(path, { strokeDasharray: length, strokeDashoffset: length });
+      gsap.to(path, { strokeDashoffset: 0, duration: 2, ease: 'power2.inOut', repeat: -1, yoyo: true });
+    }
+  }, []);
+
+  const realPath = 'M0,50 L20,50 L25,50 L28,20 L31,70 L34,40 L37,55 L40,50 L60,50 L65,50 L68,15 L71,75 L74,35 L77,58 L80,50 L100,50 L105,50 L108,10 L111,80 L114,30 L117,55 L120,50 L140,50 L160,50 L165,50 L168,18 L171,72 L174,38 L177,55 L180,50 L200,50';
+  const fakePath = 'M0,50 L40,50 L80,50 L120,50 L160,50 L200,50';
+
+  return (
+    <div className="p-6 border-3 border-ds-silver/20 bg-ds-card space-y-6">
+      <div>
+        <p className="text-xs font-mono text-ds-green mb-2 flex items-center gap-2">
+          <span className="w-2 h-2 bg-ds-green rounded-full animate-pulse" />
+          REAL FACE - 72 BPM
+        </p>
+        <svg ref={svgRef} viewBox="0 0 200 100" className="w-full h-16">
+          <path className="real-line" d={realPath} fill="none" stroke="#39ff14" strokeWidth="2.5" />
+        </svg>
+      </div>
+      <div className="h-px bg-ds-silver/10" />
+      <div>
+        <p className="text-xs font-mono text-ds-red mb-2 flex items-center gap-2">
+          <span className="w-2 h-2 bg-ds-red rounded-full" />
+          DEEPFAKE - FLATLINE
+        </p>
+        <svg viewBox="0 0 200 100" className="w-full h-16">
+          <path d={fakePath} fill="none" stroke="#ff3c00" strokeWidth="2.5" strokeDasharray="4,4" />
+        </svg>
+      </div>
+    </div>
+  );
+}

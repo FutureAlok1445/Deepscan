@@ -1,0 +1,1 @@
+def format_result(r): return f"Score: {r['aacs']}"\n

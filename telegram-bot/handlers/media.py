@@ -1,0 +1,1 @@
+async def handle_media(u, c): await u.message.reply_text("Analyzing...")\n
