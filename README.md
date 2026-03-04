@@ -8,12 +8,12 @@
 
 ## Team Members
 
-| Name | Role |
-|------|------|
-| Alok | Full-Stack Developer |
-| Rudranarayan Sahu | Backend / ML |
-| Shubham | Frontend / UI |
-| Raj | Research / Testing |
+| Name |
+|------|
+| Alok |
+| Rudranarayan Sahu |
+| Shubham |
+| Raj |
 
 ---
 
