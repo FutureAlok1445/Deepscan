@@ -167,16 +167,39 @@ class DetectionOrchestrator:
 
     # ------------------------------------------------------------------ AAS
     async def _compute_aas(self, file_path: str, category: str) -> tuple:
-        """Acoustic Anomaly Score — audio deepfake clues."""
+        """Acoustic Anomaly Score — 7-signature audio deepfake detection."""
         findings = []
         if category not in ("audio", "video"):
             return 0.0, [{"engine": "AudioAnalysis", "score": 0.0, "detail": "Skipped — no audio track"}]
         try:
-            score = await self.audio_detector.analyze(file_path)
-            findings.append({"engine": "AI-Audio-Scanner", "score": round(score, 1),
-                             "detail": "Transformer-based voice cloning analysis"})
+            full_result = await self.audio_detector.analyze_full(file_path)
+            score = full_result["score"]
+
+            # Build the primary finding with all data the frontend needs
+            finding = {
+                "engine": "AI-Audio-Scanner-7sig",
+                "score": round(score, 1),
+                "detail": f"7-signature audio analysis: {full_result.get('verdict', 'UNCERTAIN')}",
+                "spectrum": full_result.get("spectrum", []),
+                "anomalies": full_result.get("anomalies", []),
+                "splicing_detected": full_result.get("splicing_detected", False),
+                "clone_probability": full_result.get("clone_probability", round(score, 1)),
+                "signature_scores": full_result.get("signature_scores", {}),
+                "processing_time_ms": full_result.get("processing_time_ms", 0),
+            }
+            findings.append(finding)
+
+            # Add individual signature findings for the findings list
+            for f_text in full_result.get("findings", []):
+                findings.append({
+                    "engine": "AudioSignature",
+                    "score": round(score, 1),
+                    "detail": f_text,
+                })
+
             return round(score, 2), findings
         except Exception as e:
+            logger.warning(f"AAS computation error: {e}")
             return 50.0, [{"engine": "AudioAnalysis", "score": 50.0, "detail": str(e)}]
 
     # ------------------------------------------------------------------ CVS
@@ -308,6 +331,20 @@ class DetectionOrchestrator:
                 }
                 break
 
+        # ---------- Extract audio spectrum data from AAS findings ----------
+        audio_spectrum_data = {}
+        audio_signature_scores = {}
+        for f in aas_f:
+            if f.get("engine") in ("AI-Audio-Scanner-7sig", "AI-Audio-Scanner"):
+                audio_spectrum_data = {
+                    "spectrum": f.get("spectrum", []),
+                    "anomalies": f.get("anomalies", []),
+                    "splicing_detected": f.get("splicing_detected", False),
+                    "clone_probability": f.get("clone_probability", round(aas, 1)),
+                }
+                audio_signature_scores = f.get("signature_scores", {})
+                break
+
         return {
             "id": analysis_id,
             "filename": os.path.basename(file_path),
@@ -340,16 +377,20 @@ class DetectionOrchestrator:
             },
             "findings": all_findings,
             "forensics": forensics,
-            "ltca_data": getattr(self, "_last_ltca_data", {}), # Injected for frontend Physics Graph
+            "ltca_data": getattr(self, "_last_ltca_data", {}),
             "heartbeat": heartbeat_data,
             "narrative": narrative,
-            "gradcam": None,  # populated separately if image
+            "gradcam": None,
             "audio": {
-                "clone_probability": round(aas, 1) if category in ("audio", "video") else None,
-                "anomalies": [f.get("detail", "") for f in aas_f],
+                "clone_probability": audio_spectrum_data.get("clone_probability", round(aas, 1) if category in ("audio", "video") else None),
+                "spectrum": audio_spectrum_data.get("spectrum", []),
+                "splicing_detected": audio_spectrum_data.get("splicing_detected", False),
+                "anomalies": audio_spectrum_data.get("anomalies", []),
+                "signature_scores": audio_signature_scores,
             },
             "metadata": forensics.get("metadata", {}),
             "elapsed_seconds": elapsed,
+            "processing_time_ms": round(elapsed * 1000),
             "created_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
         }
 

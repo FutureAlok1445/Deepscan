@@ -153,7 +153,7 @@ const MOCK_COMMUNITY = [
   },
 ];
 
-function useMock() { return import.meta.env.MODE === 'development'; }
+function useMock() { return false; }
 
 // ─── LocalStorage DB Helpers for Dynamic Fallback ───
 function getLocalDB(key, defaultData) {

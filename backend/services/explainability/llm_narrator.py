@@ -1,28 +1,48 @@
 import os
 import json
+import httpx
 from loguru import logger
-
-try:
-    import anthropic
-    HAS_ANTHROPIC = True
-except ImportError:
-    HAS_ANTHROPIC = False
-    logger.warning("anthropic SDK not installed — narration will use fallback")
 
 
 async def narrate(aacs_score: float, findings: list, language: str = "hi") -> str:
-    key = os.getenv("ANTHROPIC_API_KEY", "")
-    if not key or not HAS_ANTHROPIC:
+    """Generate a human-readable narration of the analysis results using Groq LLM."""
+    key = os.getenv("GROQ_API_KEY", "")
+    if not key:
         verdict = "authentic" if aacs_score < 30 else "uncertain" if aacs_score < 60 else "likely fake" if aacs_score < 85 else "definitely fake"
-        return f"The media scored {aacs_score:.1f}/100 and is classified as {verdict}. {len(findings)} findings were detected. Full AI explanation requires an API key."
+        return f"The media scored {aacs_score:.1f}/100 and is classified as {verdict}. {len(findings)} findings were detected."
+
+    lang_map = {"hi": "Hindi (Hinglish)", "en": "English", "bn": "Bengali", "ta": "Tamil"}
+    lang_name = lang_map.get(language, "English")
+
+    prompt = (
+        f"You are DeepScan AI, a deepfake forensics expert. "
+        f"Summarize these detection results in 3 simple sentences in {lang_name}. "
+        f"Be direct and clear about whether the media appears real or fake.\n\n"
+        f"AACS Score: {aacs_score:.1f}/100\n"
+        f"Findings: {json.dumps(findings[:5])}"
+    )
+
     try:
-        res = await anthropic.AsyncAnthropic(api_key=key).messages.create(
-            max_tokens=256,
-            model="claude-3-5-sonnet-20240620",
-            system=f"Convert forensics results into 3 simple sentences in {language}.",
-            messages=[{"role": "user", "content": json.dumps({"score": aacs_score, "findings": findings})}]
-        )
-        return res.content[0].text
+        async with httpx.AsyncClient(timeout=15.0) as client:
+            response = await client.post(
+                "https://api.groq.com/openai/v1/chat/completions",
+                headers={
+                    "Authorization": f"Bearer {key}",
+                    "Content-Type": "application/json",
+                },
+                json={
+                    "model": "llama-3.1-8b-instant",
+                    "messages": [{"role": "user", "content": prompt}],
+                    "max_tokens": 256,
+                    "temperature": 0.7,
+                },
+            )
+            if response.status_code == 200:
+                data = response.json()
+                return data["choices"][0]["message"]["content"]
+            else:
+                logger.warning(f"Groq API error ({response.status_code}): {response.text}")
+                return f"Analysis complete. AACS Score: {aacs_score:.1f}/100."
     except Exception as e:
         logger.debug(f"Narration failed: {e}")
         return f"Analysis complete. AACS Score: {aacs_score:.1f}/100."

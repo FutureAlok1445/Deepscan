@@ -33,18 +33,34 @@ async def save_upload_file(file: UploadFile) -> dict:
         # Fallback: derive MIME from file extension
         ext = (file.filename or "").rsplit(".", 1)[-1].lower() if file.filename else ""
         _ext_mime = {"jpg": "image/jpeg", "jpeg": "image/jpeg", "png": "image/png",
-                     "mp4": "video/mp4", "wav": "audio/wav", "mp3": "audio/mpeg",
-                     "m4a": "audio/x-m4a", "webp": "image/webp", "ogg": "audio/ogg"}
+                     "bmp": "image/bmp", "webp": "image/webp",
+                     "mp4": "video/mp4", "avi": "video/x-msvideo", "mov": "video/quicktime",
+                     "mkv": "video/x-matroska", "webm": "video/webm",
+                     "wav": "audio/wav", "mp3": "audio/mpeg", "flac": "audio/flac",
+                     "m4a": "audio/x-m4a", "ogg": "audio/ogg"}
         mime = _ext_mime.get(ext, "application/octet-stream")
-    if not any([ext in mime for ext in ["jpeg", "png", "mp4", "wav", "mpeg", "x-m4a", "webp", "ogg"]]):
-        raise ValueError(f"Invalid type: {mime}")
-    path = os.path.join(UPLOAD_DIR, f"{uuid.uuid4().hex}.{mime.split('/')[-1]}")
+
+    # Validate MIME type
+    allowed_prefixes = ("image/", "video/", "audio/")
+    if not mime.startswith(allowed_prefixes):
+        raise ValueError(f"Invalid file type: {mime}")
+
+    # Map MIME to a clean file extension for storage
+    _mime_ext = {
+        "image/jpeg": "jpg", "image/png": "png", "image/bmp": "bmp", "image/webp": "webp",
+        "video/mp4": "mp4", "video/x-msvideo": "avi", "video/quicktime": "mov",
+        "video/x-matroska": "mkv", "video/webm": "webm",
+        "audio/wav": "wav", "audio/x-wav": "wav", "audio/mpeg": "mp3",
+        "audio/flac": "flac", "audio/x-m4a": "m4a", "audio/ogg": "ogg",
+    }
+    save_ext = _mime_ext.get(mime, mime.split('/')[-1])
+    path = os.path.join(UPLOAD_DIR, f"{uuid.uuid4().hex}.{save_ext}")
     os.makedirs(UPLOAD_DIR, exist_ok=True)
     with open(path, "wb") as f: f.write(contents)
     if not await scan_with_clamav(path):
         os.remove(path)
         raise ValueError("Malware detected")
-    asyncio.create_task(auto_delete_file(path))
+    asyncio.create_task(auto_delete_file(path, delay=120))
     return {"filename": os.path.basename(path), "path": path, "mime_type": mime, "size": len(contents)}
 
 def cleanup_file(file_path: str):
