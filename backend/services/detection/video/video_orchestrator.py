@@ -1,6 +1,7 @@
 import os
 import cv2
 import numpy as np
+import asyncio
 from loguru import logger
 
 from backend.services.detection.video.spatial_analyzer import SpatialAnalyzer
@@ -12,6 +13,7 @@ from backend.services.detection.video.blink_analyzer import BlinkAnalyzer
 from backend.services.detection.video.face_mesh_analyzer import FaceMeshAnalyzer
 from backend.services.detection.video.eye_reflection_analyzer import EyeReflectionAnalyzer
 from backend.services.detection.video.lip_sync_analyzer import LipSyncAnalyzer
+from backend.services.detection.video.video_describer import VideoDescriber
 from backend.services.explainability.video_nlm_report import VideoNLMReport
 
 class VideoOrchestrator:
@@ -26,8 +28,9 @@ class VideoOrchestrator:
         self.face_mesh = FaceMeshAnalyzer()
         self.eye_reflection = EyeReflectionAnalyzer()
         self.lip_sync = LipSyncAnalyzer()
+        self.describer = VideoDescriber()
         self.nlm_reporter = VideoNLMReport()
-        logger.info("VideoOrchestrator loaded — 9 detection engines active")
+        logger.info("VideoOrchestrator loaded — 9 detection engines + VideoDescriber active")
 
     async def process_video(self, video_path: str, num_frames=16) -> tuple:
         """
@@ -72,11 +75,21 @@ class VideoOrchestrator:
             noise_penalty = self.noise.analyze_frames(frames)
             artifact_penalty = self.artifact_scanner.analyze_frames(frames)
 
-            # ── 4. Advanced Engines ──
-            blink_result   = self.blink.analyze_frames(frames, fps=fps)
-            mesh_result    = self.face_mesh.analyze_frames(frames)
-            reflect_result = self.eye_reflection.analyze_frames(frames)
-            sync_result    = self.lip_sync.analyze(video_path, frames)
+            # ── 4. Advanced Engines + Content Description (run concurrently) ──
+            blink_task   = asyncio.get_event_loop().run_in_executor(None, self.blink.analyze_frames, frames, fps)
+            mesh_task    = asyncio.get_event_loop().run_in_executor(None, self.face_mesh.analyze_frames, frames)
+            reflect_task = asyncio.get_event_loop().run_in_executor(None, self.eye_reflection.analyze_frames, frames)
+
+            # Run sync tasks concurrently
+            blink_result, mesh_result, reflect_result = await asyncio.gather(
+                blink_task, mesh_task, reflect_task
+            )
+
+            sync_result  = self.lip_sync.analyze(video_path, frames)
+
+            # Video description runs concurrently with scoring
+            filename = os.path.basename(video_path)
+            description_task = self.describer.describe(frames, filename=filename)
 
             blink_score   = blink_result.get("score", 50.0)
             mesh_score    = mesh_result.get("score", 50.0)
@@ -166,6 +179,14 @@ class VideoOrchestrator:
                 })
 
             ltca_data["advanced_findings"] = advanced_findings
+
+            # ── 9. Await content description (runs concurrently with scoring) ──
+            try:
+                video_description = await description_task
+                ltca_data["video_description"] = video_description
+            except Exception as desc_err:
+                logger.warning(f"VideoDescriber task failed: {desc_err}")
+                ltca_data["video_description"] = {"description": "Content analysis unavailable.", "moments": []}
 
             return final_mas, ltca_data, frames
 

@@ -51,6 +51,16 @@ async def run():
     print(f"  Frame Offset   : {sync_offset}")
     print(f"  Blinks Found   : {blinks}")
 
+    vd = ltca.get("video_description", {})
+    if vd:
+        print("\nVideo Description:")
+        print(f"  Setting: {vd.get('setting')}")
+        print(f"  People : {vd.get('people')}")
+        print(f"  Action : {vd.get('activity')}")
+        print(f"  Moments: {len(vd.get('moments', []))} found")
+    else:
+        print("\n[WARN] No video_description found in ltca_data")
+
     # Check all frames key is NOT in response (serialization bug guard)
     assert "frames" not in ltca, "FAIL: 'frames' key still in ltca_data — serialization bug!"
     print("\n[OK] 'frames' key correctly stripped from ltca_data")
