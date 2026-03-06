@@ -30,4 +30,4 @@ python-magic==0.4.27
 anthropic==0.25.0
 python-multipart==0.0.9
 asyncpg==0.29.0
-aiofiles==23.2.1\n
+aiofiles==23.2.1
