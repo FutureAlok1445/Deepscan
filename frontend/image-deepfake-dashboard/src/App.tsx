@@ -3,6 +3,7 @@ import './App.css';
 import Article from './Article';
 import History from './History';
 import ArbitrationSystem from './ArbitrationSystem';
+import type { ArbitrationResult } from './ArbitrationSystem';
 
 interface SignalScores {
   metadata_cvs: number;
@@ -150,15 +151,8 @@ function App() {
   const [sliderPos, setSliderPos] = useState(50);
   const [refreshHistory, setRefreshHistory] = useState(0);
 
-  // Phase 5 Ensemble Score
-  const [debateScore, setDebateScore] = useState<number | null>(null);
-
-  const handleMouseMove = (e: React.MouseEvent<HTMLDivElement, MouseEvent>) => {
-    const rect = e.currentTarget.getBoundingClientRect();
-    const x = Math.max(0, Math.min(e.clientX - rect.left, rect.width));
-    const percent = (x / rect.width) * 100;
-    setSliderPos(percent);
-  };
+  // Phase 5: Grand Arbitration result (replaces separate debateScore)
+  const [arbitrationResult, setArbitrationResult] = useState<ArbitrationResult | null>(null);
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files[0]) {
@@ -166,8 +160,8 @@ function App() {
       setFile(selected);
       setPreviewUrl(URL.createObjectURL(selected));
       setResult(null);
-      setHeatUrl(null); // Phase 4
-      setDebateScore(null); // Phase 5
+      setHeatUrl(null);
+      setArbitrationResult(null); // Phase 5
       setError('');
     }
   };
@@ -175,8 +169,8 @@ function App() {
   const handleSelectScan = async (scanId: string) => {
     setLoading(true);
     setError('');
-    setHeatUrl(null); // Phase 4
-    setDebateScore(null); // Phase 5
+    setHeatUrl(null);
+    setArbitrationResult(null); // Phase 5
     const API_BASE = 'http://127.0.0.1:8000/api/v1/analyze';
     try {
       const resp = await fetch(`${API_BASE}/result/${scanId}`);
@@ -216,8 +210,8 @@ function App() {
 
     setLoading(true);
     setResult(null);
-    setHeatUrl(null); // Phase 4
-    setDebateScore(null); // Phase 5
+    setHeatUrl(null);
+    setArbitrationResult(null); // Phase 5 — will re-run via useEffect in ArbitrationSystem
     setError('');
 
     const API_BASE = 'http://127.0.0.1:8000/api/v1/analyze';
@@ -288,21 +282,6 @@ function App() {
     }
   };
 
-  const getVerdictColor = (verdict: string) => {
-    switch (verdict) {
-      case 'Authentic': return '#10b981'; // green
-      case 'Uncertain': return '#f59e0b'; // yellow
-      case 'Likely Fake': return '#ef4444'; // red
-      case 'Definitely Fake': return '#991b1b'; // dark red
-      default: return '#3b82f6';
-    }
-  };
-
-  // Phase 5 Ensemble Calculation
-  const finalEnsembleScore = result && debateScore !== null
-    ? (result.score * 0.4 + debateScore * 0.6).toFixed(1)
-    : result?.score.toFixed(1);
-
   return (
     <div className="App">
       <header className="app-header">
@@ -343,12 +322,22 @@ function App() {
 
             {error && <div className="error-msg">{error}</div>}
 
-            {/* Phase 5: Multi-AI Debate Trigger */}
-            {file && previewUrl && !loading && (
+            {/* Phase 5: Puter Multi-AI Arbitration — always visible once a file is selected */}
+            {file && previewUrl && (
               <ArbitrationSystem
                 imageFile={file}
                 previewUrl={previewUrl}
-                onArbitrationComplete={(score) => setDebateScore(score)}
+                backendScore={result ? result.score : null}
+                onComplete={async (arbResult) => {
+                  setArbitrationResult(arbResult);
+                  // Wire Claude Vision regions into the thermal heatmap canvas
+                  if (arbResult.regions.length > 0 && previewUrl) {
+                    const img = new Image();
+                    img.crossOrigin = 'anonymous';
+                    img.onload = async () => setHeatUrl(await compositeHeatmap(img, arbResult.regions));
+                    img.src = previewUrl;
+                  }
+                }}
               />
             )}
           </div>
@@ -363,68 +352,115 @@ function App() {
             {result && (
               <div className="dashboard">
 
-                {/* Phase 5 Grand Ensemble Banner */}
-                {debateScore !== null && (
-                  <div className="ensemble-banner" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: 'linear-gradient(90deg, #1e1b4b 0%, #312e81 100%)', padding: '15px 25px', borderRadius: '12px', marginBottom: '20px', boxShadow: '0 4px 15px rgba(0,0,0,0.3)', border: '1px solid #4f46e5' }}>
-                    <div>
-                      <h2 style={{ margin: 0, color: '#e0e7ff', fontSize: '1.2rem' }}>Grand Ensemble AI Verdict</h2>
-                      <p style={{ margin: '5px 0 0 0', color: '#a5b4fc', fontSize: '0.9rem' }}>40% Backend Python Forensics + 60% Multi-LLM Debate</p>
+                {/* ── Single Unified Verdict ─────────────────────────── */}
+                {arbitrationResult ? (
+                  /* Arbitration complete — use Grand Verdict (Arbitrator has majority weight) */
+                  <div className="verdict-banner" style={{ backgroundColor: arbitrationResult.verdictColor, padding: '20px 24px' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '12px' }}>
+                      <div>
+                        <h2 style={{ margin: '0 0 4px 0' }}>⚖️ {arbitrationResult.verdict}</h2>
+                        <p style={{ margin: 0, opacity: 0.9, fontSize: '0.9rem' }}>{arbitrationResult.summary}</p>
+                      </div>
+                      <div style={{ textAlign: 'center' }}>
+                        <div style={{ fontSize: '3rem', fontWeight: 'bold', lineHeight: 1 }}>{arbitrationResult.finalScore}%</div>
+                        <div style={{ fontSize: '11px', opacity: 0.8 }}>Grand AI Score</div>
+                      </div>
                     </div>
-                    <div style={{ fontSize: '2rem', fontWeight: 'bold', color: parseFloat(finalEnsembleScore as string) > 50 ? '#f87171' : '#34d399' }}>
-                      {finalEnsembleScore}% Fake
+                    {/* Sub-scores breakdown */}
+                    <div style={{ display: 'flex', gap: '8px', marginTop: '12px', flexWrap: 'wrap' }}>
+                      {[
+                        { label: 'Arbitrator + EXIF (40%)', val: arbitrationResult.finalScore },
+                        { label: 'GPT-4o Direct (25%)', val: arbitrationResult.debateScore },
+                        { label: 'Claude Vis + HF (20%)', val: arbitrationResult.claudeScore },
+                        { label: 'Backend/HF (15%)', val: result.score },
+                      ].map(s => (
+                        <div key={s.label} style={{ flex: 1, minWidth: '90px', background: 'rgba(0,0,0,0.25)', borderRadius: '6px', padding: '6px 10px', textAlign: 'center' }}>
+                          <div style={{ fontSize: '20px', fontWeight: 'bold' }}>{s.val}%</div>
+                          <div style={{ fontSize: '10px', opacity: 0.7 }}>{s.label}</div>
+                        </div>
+                      ))}
                     </div>
+                    <div style={{ marginTop: '10px' }}>
+                      <div className="score-meter"><div className="score-fill" style={{ width: `${arbitrationResult.finalScore}%` }}></div></div>
+                    </div>
+                  </div>
+                ) : (
+                  /* Arbitration still running — show AACS score as placeholder */
+                  <div className="verdict-banner" style={{ backgroundColor: '#1e40af', padding: '16px 24px' }}>
+                    <h2 style={{ margin: '0 0 4px 0' }}>⏳ Awaiting Arbitration...</h2>
+                    <p style={{ margin: 0, opacity: 0.8, fontSize: '0.9rem' }}>Backend AACS: {result.score}% — Multi-AI debate in progress</p>
+                    <div className="score-meter" style={{ marginTop: '8px' }}><div className="score-fill" style={{ width: `${result.score}%`, background: 'rgba(255,255,255,0.4)' }}></div></div>
                   </div>
                 )}
-
-                <div className="verdict-banner" style={{ backgroundColor: getVerdictColor(result.verdict) }}>
-                  <h2>Standard AACS Verdict: {result.verdict}</h2>
-                  <div className="score-meter">
-                    <div className="score-fill" style={{ width: `${result.score}%` }}></div>
-                  </div>
-                  <p>Backend AI Probability (AACS): {result.score}%</p>
-                </div>
 
                 <div className="details-grid">
                   <div className="card explanation">
                     <h3>Analysis Explanation</h3>
                     <div className="typed-text">
-                      {result.explainability.text.split('\n').map((line, i) => (
-                        <p key={i}>{line}</p>
-                      ))}
+                      {/* Show arbitration summary if available, otherwise backend explanation */}
+                      {arbitrationResult
+                        ? <p>{arbitrationResult.summary}</p>
+                        : result.explainability.text.split('\n').map((line, i) => <p key={i}>{line}</p>)
+                      }
                     </div>
+                    {arbitrationResult?.exifDetails && (
+                      <div style={{ marginTop: '16px', padding: '12px', background: 'rgba(59,130,246,0.1)', border: '1px solid rgba(59,130,246,0.5)', borderRadius: '6px' }}>
+                        <strong style={{ color: '#60a5fa', display: 'block', marginBottom: '4px' }}>Hardware Metadata (EXIF):</strong>
+                        <span style={{ fontSize: '0.9rem', color: '#cbd5e1' }}>{arbitrationResult.exifDetails}</span>
+                      </div>
+                    )}
                   </div>
 
                   <div className="card heatmaps">
-                    <h3>{heatUrl ? "Claude Vision AI Regions" : "ELA Pixel Anomaly"} (Drag to slide)</h3>
-                    <div
-                      className="img-compare"
-                      onMouseMove={handleMouseMove}
-                      onTouchMove={(e) => {
-                        const rect = e.currentTarget.getBoundingClientRect();
-                        const x = Math.max(0, Math.min(e.touches[0].clientX - rect.left, rect.width));
-                        setSliderPos((x / rect.width) * 100);
-                      }}
-                    >
-                      <img className="slider-img" src={previewUrl!} alt="Original" />
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
+                      <h3 style={{ margin: 0 }}>{heatUrl ? "Claude Vision AI Regions" : "ELA Pixel Anomaly"}</h3>
+                      {(heatUrl || result.explainability.ela_base64_heatmap_prefix) && (
+                        <div style={{ display: "flex", gap: "6px" }}>
+                          <button
+                            onMouseEnter={() => setSliderPos(100)} // Using sliderPos as a boolean toggle (100 = show heat, 0 = hide heat)
+                            onMouseLeave={() => setSliderPos(0)}
+                            onClick={() => setSliderPos(prev => prev === 100 ? 0 : 100)}
+                            style={{
+                              padding: "6px 14px", fontSize: "12px", letterSpacing: "1px",
+                              cursor: "pointer", borderRadius: "4px", fontWeight: "bold",
+                              background: sliderPos === 100 ? "#ec4899" : "transparent",
+                              border: "1px solid #ec4899",
+                              color: sliderPos === 100 ? "#fff" : "#ec4899",
+                              transition: "all 0.2s"
+                            }}>
+                            {sliderPos === 100 ? "HIDE HEATMAP" : "SHOW HEATMAP (HOVER)"}
+                          </button>
+                        </div>
+                      )}
+                    </div>
 
-                      <div className="overlay-wrapper" style={{
-                        position: 'absolute', top: 0, left: 0, height: '100%', width: `${sliderPos}%`, overflow: 'hidden'
-                      }}>
-                        <img
-                          className="overlay-img"
-                          src={heatUrl || result.explainability.ela_base64_heatmap_prefix}
-                          alt="Heatmap"
-                          style={{ width: '100vw', maxWidth: '600px' }} // Ensures the image inside wrapper doesn't shrink
-                        />
-                      </div>
-
-                      <div className="slider-handle" style={{ left: `${sliderPos}%` }}></div>
+                    <div style={{ position: "relative", background: "#080808", textAlign: "center", borderRadius: "6px", overflow: "hidden" }}>
+                      <img
+                        src={previewUrl!}
+                        alt="Original"
+                        style={{ maxWidth: "100%", maxHeight: "500px", display: "block", margin: "0 auto" }}
+                      />
+                      {/* Heatmap Overlay */}
+                      <img
+                        src={heatUrl || result.explainability.ela_base64_heatmap_prefix}
+                        alt="Heatmap"
+                        style={{
+                          position: "absolute", inset: 0, width: "100%", height: "100%",
+                          objectFit: "contain", /* Ensure it perfectly aligns with the base image */
+                          opacity: sliderPos === 100 ? 1 : 0,
+                          transition: "opacity 0.3s ease",
+                          pointerEvents: "none"
+                        }}
+                      />
                     </div>
                   </div>
 
                   <div className="card layers-breakdown">
                     <h3>10-Layer Signal Breakdown</h3>
                     <ul>
+                      {arbitrationResult?.hfScore !== null && arbitrationResult?.hfScore !== undefined && (
+                        <li><strong style={{ color: '#ec4899' }}>Hugging Face Model:</strong> {arbitrationResult.hfScore}% AI Probability</li>
+                      )}
                       <li><strong>Pixel Manipulation (CNN):</strong> {result.signals.visual_forensics_mas.toFixed(1)} MAS</li>
                       <li><strong>Face Geometry (MediaPipe):</strong> {result.signals.face_geometry_pps.toFixed(1)} PPS</li>
                       <li><strong>GAN Frequencies (FFT):</strong> {result.signals.frequency.toFixed(1)} Freq</li>
@@ -432,6 +468,15 @@ function App() {
                       <li><strong>Metadata Validity (EXIF):</strong> {result.signals.metadata_cvs.toFixed(1)} CVS</li>
                       {result.signals.diffusion_fingerprint !== undefined && (
                         <li><strong style={{ color: '#c084fc' }}>Diffusion Fingerprint (HF):</strong> {result.signals.diffusion_fingerprint.toFixed(1)} DIFF</li>
+                      )}
+                      {/* Phase 5 Arbitration sub-scores */}
+                      {arbitrationResult && (
+                        <>
+                          <li style={{ borderTop: '1px solid rgba(255,255,255,0.1)', paddingTop: '6px', marginTop: '6px' }}>
+                            <strong style={{ color: '#fb923c' }}>Claude Vision (Puter):</strong> {arbitrationResult.claudeVerdict}
+                          </li>
+                          <li><strong style={{ color: '#a78bfa' }}>LLM Debate Score:</strong> {arbitrationResult.debateScore}%</li>
+                        </>
                       )}
                     </ul>
                   </div>

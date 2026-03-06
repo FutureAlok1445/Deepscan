@@ -30,7 +30,6 @@ class MetadataExtractor:
             
             if not exif_data:
                 metadata["score_cvs"] = 90.0
-                metadata["anomalies"].append("Missing EXIF data (common in downloaded/web images, assuming neutral)")
                 return metadata
                 
             for tag_id, value in exif_data.items():
