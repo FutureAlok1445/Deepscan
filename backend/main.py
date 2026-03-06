@@ -13,19 +13,27 @@ except ImportError:
 
 from backend.config import settings
 from backend.api.v1.endpoints import (
-    analyze, analyze_url, live_scan, history, report, community, webhook
+    analyze, analyze_url, analyze_image, live_scan, history, report, community, webhook
 )
 from backend.services.detection.orchestrator import orchestrator
+from backend.services.IMageDetector.orchestrator import image_orchestrator
 from backend.utils.rate_limiter import limiter
+from backend.db import models
+from backend.db.database import engine
 
 @contextlib.asynccontextmanager
 async def lifespan(app: FastAPI):
-    logger.info("Starting DeepScan API — loading models...")
+    logger.info("Starting DeepScan API — loading models and initializing DB...")
     try:
+        # Create database tables if they don't exist
+        models.Base.metadata.create_all(bind=engine)
+        logger.info("Database tables initialized")
+        
         await orchestrator.load_models()
+        await image_orchestrator.load_models()
         logger.info("All ML models loaded successfully")
     except Exception as e:
-        logger.warning(f"Model preload failed (will lazy-load): {e}")
+        logger.warning(f"Startup initialization failed: {e}")
     yield
     logger.info("Shutting down DeepScan API...")
 
@@ -65,6 +73,7 @@ async def global_exception_handler(request: Request, exc: Exception):
 
 app.include_router(analyze.router, prefix="/api/v1/analyze", tags=["Analyze"])
 app.include_router(analyze_url.router, prefix="/api/v1/analyze", tags=["Analyze URL"])
+app.include_router(analyze_image.router, prefix="/api/v1/analyze", tags=["Analyze Image"])
 app.include_router(live_scan.router, prefix="/ws", tags=["Live Scan"])
 app.include_router(history.router, prefix="/api/v1/history", tags=["History"])
 app.include_router(report.router, prefix="/api/v1/report", tags=["Report"])

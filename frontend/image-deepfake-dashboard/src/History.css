@@ -1,0 +1,112 @@
+.history-sidebar {
+    background: #1e293b;
+    border: 1px solid #334155;
+    border-radius: 12px;
+    padding: 1.5rem;
+    height: fit-content;
+    max-height: 800px;
+    display: flex;
+    flex-direction: column;
+}
+
+.history-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 1.5rem;
+    border-bottom: 1px solid #334155;
+    padding-bottom: 0.5rem;
+}
+
+.history-header h3 {
+    margin: 0;
+    color: #f8fafc;
+    font-size: 1.2rem;
+}
+
+.refresh-btn {
+    background: transparent;
+    border: none;
+    color: #64748b;
+    font-size: 1.4rem;
+    cursor: pointer;
+    transition: color 0.2s;
+}
+
+.refresh-btn:hover {
+    color: #3b82f6;
+}
+
+.history-list {
+    overflow-y: auto;
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+}
+
+.history-item {
+    padding: 0.75rem;
+    background: #0f172a;
+    border: 1px solid #334155;
+    border-radius: 8px;
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+.history-item:hover {
+    border-color: #3b82f6;
+    background: #1e293b;
+}
+
+.history-item.failed {
+    border-left: 4px solid #ef4444;
+}
+
+.history-item.done {
+    border-left: 4px solid #10b981;
+}
+
+.item-main {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 0.25rem;
+}
+
+.item-verdict {
+    color: #f1f5f9;
+    font-weight: 600;
+    font-size: 0.95rem;
+}
+
+.item-score {
+    color: #3b82f6;
+    font-weight: 700;
+    font-size: 0.9rem;
+}
+
+.item-meta {
+    display: flex;
+    justify-content: space-between;
+    font-size: 0.75rem;
+    color: #64748b;
+}
+
+.item-status-tag {
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    font-weight: 700;
+}
+
+.empty-msg {
+    text-align: center;
+    color: #64748b;
+    font-style: italic;
+    padding: 1rem 0;
+}
+
+.history-error {
+    color: #ef4444;
+    font-size: 0.8rem;
+    margin-bottom: 1rem;
+}
