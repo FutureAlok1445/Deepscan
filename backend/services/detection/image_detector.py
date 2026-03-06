@@ -1,61 +1,59 @@
+import os
+import asyncio
 from loguru import logger
-
-try:
-    import torch
-    import torch.nn as nn
-    from torchvision import models, transforms
-    HAS_TORCH = True
-except ImportError:
-    HAS_TORCH = False
-    logger.warning("torch/torchvision not installed — ImageDetector will return heuristic scores")
-
-try:
-    from PIL import Image
-    HAS_PIL = True
-except ImportError:
-    HAS_PIL = False
-    logger.warning("Pillow not installed — ImageDetector heuristic will use file hash only")
-
-import hashlib
-
+from backend.utils.hf_api import query_huggingface
 
 class ImageDetector:
     def __init__(self):
-        self.model = None
-        self.transform = None
-        self.device = None
-        if HAS_TORCH:
-            try:
-                self.device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-                base = models.efficientnet_b4(weights=None)
-                base.classifier[1] = nn.Linear(base.classifier[1].in_features, 1)
-                self.model = base.to(self.device).eval()
-                self.transform = transforms.Compose([
-                    transforms.Resize((380, 380)),
-                    transforms.ToTensor(),
-                    transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]),
-                ])
-            except Exception as e:
-                logger.warning(f"EfficientNet init failed: {e}")
+        # We now use the Hugging Face Inference API instead of local model loading
+        # to ensure high accuracy without massive local GPU requirements.
+        self.model_id = "prithivMLmods/Deep-Fake-Detector-v2-Model"
+        logger.info(f"ImageDetector initialized with HF model: {self.model_id}")
 
     def predict(self, image_path: str) -> float:
+        """
+        Synchronous wrapper for predict_async to maintain compatibility 
+        with existing orchestrator signature if needed, though orchestrator 
+        is async-capable.
+        """
+        return asyncio.run(self.predict_async(image_path))
+
+    async def predict_async(self, image_path: str) -> float:
+        """
+        Detects if an image is a deepfake using a Vision Transformer (ViT).
+        Returns a score from 0 to 100 (where 100 is definitely fake).
+        """
         try:
-            if self.model and self.transform and HAS_TORCH:
-                image = Image.open(image_path).convert('RGB')
-                tensor = self.transform(image).unsqueeze(0).to(self.device)
-                with torch.no_grad():
-                    return self.model(tensor).item() * 100.0
-            # Heuristic fallback: use image stats to produce a deterministic score
-            if HAS_PIL:
-                img = Image.open(image_path).convert('RGB')
-                import numpy as np
-                arr = np.array(img, dtype=np.float32)
-                h = int(hashlib.md5(arr.tobytes()[:4096]).hexdigest()[:8], 16)
-                return float(h % 6000) / 100.0 + 20.0  # 20-80 range
-            # No PIL: hash file bytes directly
-            with open(image_path, "rb") as f:
-                h = int(hashlib.md5(f.read(4096)).hexdigest()[:8], 16)
-            return float(h % 6000) / 100.0 + 20.0
+            result = await query_huggingface(self.model_id, file_path=image_path)
+            
+            if "error" in result:
+                logger.error(f"ImageDetector API error: {result['error']}")
+                return 50.0  # Fallback to neutral score
+
+            # Expected format: [{"label": "Real", "score": 0.9}, {"label": "Fake", "score": 0.1}]
+            # or simply a list of scores.
+            fake_score = 0.0
+            if isinstance(result, list):
+                for item in result:
+                    label = str(item.get("label", "")).lower()
+                    if label in ["fake", "deepfake", "label_1", "synthetic"]:
+                        fake_score = item.get("score", 0.0)
+                        break
+                    # If model returns "Realism" / "Deepfake"
+                    if label == "deepfake":
+                        fake_score = item.get("score", 0.0)
+                        break
+                
+                # If we only found a high "Real" score, the fake score is 1 - real
+                if fake_score == 0.0:
+                    for item in result:
+                        label = str(item.get("label", "")).lower()
+                        if label in ["real", "authentic", "label_0", "realism"]:
+                            fake_score = 1.0 - item.get("score", 1.0)
+                            break
+            
+            return round(fake_score * 100, 2)
+
         except Exception as e:
-            logger.debug(f"ImageDetector.predict fallback: {e}")
+            logger.error(f"ImageDetector.predict_async failed: {e}")
             return 50.0

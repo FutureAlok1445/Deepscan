@@ -19,6 +19,7 @@ import NarrativeExplanation from '../components/analysis/NarrativeExplanation';
 import HeartbeatChart from '../components/analysis/HeartbeatChart';
 import GradCamOverlay from '../components/analysis/GradCamOverlay';
 import AudioSpectrum from '../components/analysis/AudioSpectrum';
+import TrajectoryPlot from '../components/analysis/TrajectoryPlot';
 import ShareVerdict from '../components/accessibility/ShareVerdict';
 import DownloadReport from '../components/accessibility/DownloadReport';
 
@@ -189,6 +190,29 @@ export default function Result() {
         {/* Audio */}
         {result.audio && (
           <div className="result-section"><AudioSpectrum audioData={result.audio} /></div>
+        )}
+
+        {/* Latent Trajectory (Physics Graph) */}
+        {result.ltca_data && result.ltca_data.trajectory_plot && result.ltca_data.trajectory_plot.length > 0 && (
+          <div className="result-section">
+            <TrajectoryPlot trajectoryData={result.ltca_data.trajectory_plot} />
+          </div>
+        )}
+
+        {/* Deep NLM Forensic Analysis */}
+        {result.ltca_data && result.ltca_data.nlm_report && (
+          <div className="result-section">
+            <BrutalCard className="p-6 bg-ds-silver/5 border-l-8 border-l-ds-cyan">
+              <h3 className="font-grotesk font-black text-ds-silver text-xl uppercase tracking-widest mb-4 flex items-center gap-2">
+                <span className="text-ds-cyan">[NLM]</span> Deep Expert Analysis
+              </h3>
+              <div className="font-mono text-sm text-ds-silver/80 leading-relaxed space-y-4">
+                {result.ltca_data.nlm_report.split('\n\n').map((paragraph, i) => (
+                  <p key={i}>{paragraph}</p>
+                ))}
+              </div>
+            </BrutalCard>
+          </div>
         )}
 
         {/* Bottom CTA */}
