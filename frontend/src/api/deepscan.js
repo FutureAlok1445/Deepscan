@@ -1,10 +1,12 @@
 import axios from 'axios';
 
-const BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000';
+// ─── Base URL: empty in dev (uses Vite proxy), full URL in prod ───
+const isDev = import.meta.env.DEV;
+const BASE_URL = isDev ? '' : (import.meta.env.VITE_API_URL || '');
 
 const api = axios.create({
   baseURL: BASE_URL + '/api/v1',
-  timeout: 60000, // default 60s for normal calls
+  timeout: 60000,
 });
 
 api.interceptors.request.use((config) => {
@@ -21,7 +23,30 @@ api.interceptors.response.use(
   }
 );
 
-export const WS_URL = BASE_URL.replace('http', 'ws');
+// WebSocket URL: in dev goes through Vite proxy, in prod uses configured URL
+export const WS_URL = isDev
+  ? `ws://${typeof window !== 'undefined' ? window.location.host : 'localhost:3000'}`
+  : (import.meta.env.VITE_WS_URL || BASE_URL.replace(/^http/, 'ws'));
+
+// ─── Session ID ───
+export function getSessionId() {
+  let sid = sessionStorage.getItem('ds_session');
+  if (!sid) {
+    sid = 'sess_' + Date.now() + '_' + Math.random().toString(36).slice(2, 8);
+    sessionStorage.setItem('ds_session', sid);
+  }
+  return sid;
+}
+
+// ─── Health Check ───
+export async function checkHealth() {
+  try {
+    const res = await axios.get(BASE_URL + '/health', { timeout: 5000 });
+    return { ok: true, data: res.data };
+  } catch {
+    return { ok: false, data: null };
+  }
+}
 
 // ─── Mock Data ───
 const MOCK_RESULT = {
@@ -236,9 +261,11 @@ function getLocalHistory() {
   } catch { return []; }
 }
 
-export async function analyzeFile(file, onUploadProgress) {
+export async function analyzeFile(file, onUploadProgress, language = 'en') {
   const formData = new FormData();
   formData.append('file', file);
+  formData.append('language', language);
+  formData.append('session_id', getSessionId());
   // Large videos need a much longer timeout — 30 minutes
   const res = await api.post('/analyze', formData, {
     headers: { 'Content-Type': 'multipart/form-data' },
@@ -259,8 +286,8 @@ export async function analyzeFile(file, onUploadProgress) {
   return result;
 }
 
-export async function analyzeUrl(url) {
-  const res = await api.post('/analyze/url', { url });
+export async function analyzeUrl(url, language = 'en') {
+  const res = await api.post('/analyze/url', { url, language, session_id: getSessionId() });
   const result = normalizeResult(res.data);
   cacheResult(result.id, result);
   cacheHistoryItem({
@@ -308,7 +335,16 @@ export async function getCommunityAlerts() {
   try {
     const res = await api.get('/community');
     const data = res.data;
-    return Array.isArray(data) ? data : (data.items || []);
+    const items = Array.isArray(data) ? data : (data.items || []);
+    // Normalize backend field names → frontend AlertCard expected fields
+    return items.map(item => ({
+      ...item,
+      score: item.score ?? item.trust_score ?? 0,
+      description: item.description ?? item.content ?? '',
+      reporter: item.reporter ?? item.submitted_by ?? 'anonymous',
+      upvotes: item.upvotes ?? 0,
+      downvotes: item.downvotes ?? 0,
+    }));
   } catch {
     return [];
   }

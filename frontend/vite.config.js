@@ -16,11 +16,37 @@ export default defineConfig({
     proxy: {
       '/api': {
         target: 'http://localhost:8000',
-        changeOrigin: true
+        changeOrigin: true,
+        configure: (proxy) => {
+          proxy.on('error', (err) => {
+            console.warn('[vite proxy] /api error:', err.message)
+          })
+        }
+      },
+      '/health': {
+        target: 'http://localhost:8000',
+        changeOrigin: true,
       },
       '/ws': {
         target: 'ws://localhost:8000',
-        ws: true
+        ws: true,
+        configure: (proxy) => {
+          proxy.on('error', (err) => {
+            console.warn('[vite proxy] /ws error:', err.message)
+          })
+        }
+      }
+    }
+  },
+  build: {
+    outDir: 'dist',
+    sourcemap: false,
+    rollupOptions: {
+      output: {
+        manualChunks: {
+          vendor: ['react', 'react-dom', 'react-router-dom'],
+          charts: ['recharts'],
+        }
       }
     }
   }
