@@ -12,6 +12,7 @@ const History = lazy(() => import('./pages/History'))
 const Learn = lazy(() => import('./pages/Learn'))
 const Community = lazy(() => import('./pages/Community'))
 const TextScan = lazy(() => import('./pages/TextScan'))
+const TextAnalyze = lazy(() => import('./pages/TextAnalyze'))
 
 function PageLoader() {
   return (
@@ -62,15 +63,17 @@ export default function App() {
       }} />
       <Navbar transparent={isHome} />
       <main style={{ paddingTop: isHome ? 0 : 64 }}>
-        <Routes>
-          <Route path="/" element={<Home />} />
-          <Route path="/analyze" element={<Analyze />} />
-          <Route path="/result/:id" element={<Result />} />
-          <Route path="/history" element={<History />} />
-          <Route path="/learn" element={<Learn />} />
-          <Route path="/community" element={<Community />} />
-          <Route path="/analyze/text" element={<TextAnalyze />} />
-        </Routes>
+        <Suspense fallback={<PageLoader />}>
+          <Routes>
+            <Route path="/" element={<Home />} />
+            <Route path="/analyze" element={<Analyze />} />
+            <Route path="/result/:id" element={<Result />} />
+            <Route path="/history" element={<History />} />
+            <Route path="/learn" element={<Learn />} />
+            <Route path="/community" element={<Community />} />
+            <Route path="/analyze/text" element={<TextAnalyze />} />
+          </Routes>
+        </Suspense>
       </main>
       <Footer />
     </div>

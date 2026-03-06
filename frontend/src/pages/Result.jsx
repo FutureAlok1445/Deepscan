@@ -1,5 +1,5 @@
 import React, { useRef, useEffect } from 'react';
-import { useParams, Link } from 'react-router-dom';
+import { useParams, Link, useLocation } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { ArrowLeft, Loader, AlertCircle } from 'lucide-react';
 import gsap from 'gsap';
@@ -25,9 +25,12 @@ import DetectionBreakdown from '../components/analysis/DetectionBreakdown';
 import VideoDescription from '../components/analysis/VideoDescription';
 import ShareVerdict from '../components/accessibility/ShareVerdict';
 import DownloadReport from '../components/accessibility/DownloadReport';
+import ArbitrationSystem from '../components/analysis/ArbitrationSystem';
 
 export default function Result() {
   const { id } = useParams();
+  const location = useLocation();
+  const originalFile = location.state?.originalFile || null;
   const resultRef = useRef(null);
 
   const { data: result, isLoading, error } = useQuery({
@@ -158,6 +161,16 @@ export default function Result() {
             </div>
           </BrutalCard>
         </div>
+
+        {/* --- Image Forensics (Arbitration System) --- */}
+        {result.file_type && result.file_type.includes('image') && (
+          <div className="result-section">
+            <ArbitrationSystem
+              imageFile={originalFile}
+              backendScore={score}
+            />
+          </div>
+        )}
 
         {/* Key Findings */}
         {result.findings?.length > 0 && (

@@ -57,9 +57,9 @@ export default function Analyze() {
         result = await analyze(file);
       }
       if (result?.id) {
-        navigate(`/result/${result.id}`);
+        navigate(`/result/${result.id}`, { state: { originalFile: file } });
       } else if (result) {
-        navigate('/result/demo');
+        navigate('/result/demo', { state: { originalFile: file } });
       }
     } catch {
       // error is handled in hook
@@ -120,11 +120,10 @@ export default function Analyze() {
             <button
               key={id}
               onClick={() => { setActiveTab(id); reset(); }}
-              className={`flex items-center gap-1.5 sm:gap-2 px-3 sm:px-6 py-2.5 sm:py-3 font-mono text-xs sm:text-sm uppercase tracking-wider transition-all duration-300 ${
-                activeTab === id
+              className={`flex items-center gap-1.5 sm:gap-2 px-3 sm:px-6 py-2.5 sm:py-3 font-mono text-xs sm:text-sm uppercase tracking-wider transition-all duration-300 ${activeTab === id
                   ? 'text-ds-red border-b-3 border-ds-red bg-ds-red/5 shadow-[0_4px_20px_rgba(255,60,0,0.15)]'
                   : 'text-ds-silver/50 hover:text-ds-silver hover:bg-ds-silver/5'
-              }`}
+                }`}
             >
               <Icon className="w-4 h-4" />
               {label}
@@ -137,11 +136,10 @@ export default function Analyze() {
           <div className="space-y-4 analyze-content">
             <div
               {...getRootProps()}
-              className={`border-3 border-dashed p-6 sm:p-12 text-center cursor-pointer transition-all duration-300 group relative overflow-hidden ${
-                isDragActive
+              className={`border-3 border-dashed p-6 sm:p-12 text-center cursor-pointer transition-all duration-300 group relative overflow-hidden ${isDragActive
                   ? 'border-ds-red bg-ds-red/10 shadow-[0_0_40px_rgba(255,60,0,0.2)]'
                   : 'border-ds-silver/30 hover:border-ds-cyan/60 hover:shadow-[0_0_30px_rgba(0,245,255,0.1)]'
-              }`}
+                }`}
             >
               <input {...getInputProps()} />
               {/* Animated corner decorations */}
@@ -149,7 +147,7 @@ export default function Analyze() {
               <div className="absolute top-0 right-0 w-8 h-8 border-t-2 border-r-2 border-ds-cyan/40 transition-all group-hover:w-12 group-hover:h-12 group-hover:border-ds-cyan" />
               <div className="absolute bottom-0 left-0 w-8 h-8 border-b-2 border-l-2 border-ds-cyan/40 transition-all group-hover:w-12 group-hover:h-12 group-hover:border-ds-cyan" />
               <div className="absolute bottom-0 right-0 w-8 h-8 border-b-2 border-r-2 border-ds-cyan/40 transition-all group-hover:w-12 group-hover:h-12 group-hover:border-ds-cyan" />
-              
+
               <Upload className="w-12 h-12 mx-auto text-ds-silver/30 mb-4 group-hover:text-ds-cyan transition-colors group-hover:scale-110 transform duration-300" />
               <p className="font-grotesk font-bold text-lg text-ds-silver">
                 {isDragActive ? 'Drop it here!' : 'Drag & drop media file'}
@@ -230,7 +228,7 @@ export default function Analyze() {
             disabled={activeTab === 'upload' ? !file : activeTab === 'url' ? !url : true}
             className="group relative overflow-hidden"
           >
-            <Shield className="w-5 h-5 group-hover:rotate-12 transition-transform" /> 
+            <Shield className="w-5 h-5 group-hover:rotate-12 transition-transform" />
             <span>Analyze Now</span>
             <Zap className="w-4 h-4 opacity-0 group-hover:opacity-100 transition-opacity" />
           </BrutalButton>
