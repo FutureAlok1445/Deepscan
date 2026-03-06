@@ -115,25 +115,25 @@ class LatentTrajectoryForensics:
             avg_curvature = float(np.mean(curvatures))
             velocity_variance = float(np.var(velocities))
 
-            # HEURISTIC LOGIC:
-            # Real Video: High Curvature (>0.8), Steady Velocity (Low Variance)
-            # AI Video: Low Curvature (Jittery path), Erratic Velocity (High Variance)
+            # HEURISTIC LOGIC (Zero False Positives Rethink):
+            # Handheld cameras, fast action, and compression cause natural jitter.
+            # We must only flag mathematically impossible physics (e.g. complete vector collapse).
             
             is_fake = False
             confidence = 0
-            reason = "Natural Physics"
+            reason = "Natural Physics or minor camera shake."
             
-            if avg_curvature < 0.65:
-                # The motion vector is zig-zagging randomly
+            if avg_curvature < 0.25:
+                # The motion vector is completely chaotic/random (Highly unusual for real video)
                 is_fake = True
-                confidence = 92
-                reason = "GEOMETRIC FAILURE: Latent trajectory is non-smooth (Jittery Physics)."
+                confidence = 65 # Reduced from 92: Physics alone does not prove a deepfake
+                reason = "GEOMETRIC ANOMALY: Severe latent trajectory collapse detected."
             
-            elif velocity_variance > 2.0:
-                # The object is accelerating/decelerating impossibly fast
+            elif velocity_variance > 8.0:
+                # The object is teleporting between frames
                 is_fake = True
-                confidence = 85
-                reason = "TEMPORAL INSTABILITY: Inconsistent motion velocity."
+                confidence = 50 # Reduced from 85
+                reason = "TEMPORAL ANOMALY: Impossibly high velocity variance."
 
             return {
                 "is_fake": is_fake,

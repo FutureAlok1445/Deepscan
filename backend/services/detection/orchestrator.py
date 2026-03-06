@@ -19,6 +19,7 @@ from backend.services.fusion.cdcf_engine import CDCFEngine
 from backend.services.fusion.score_calculator import calculate_aacs, get_verdict
 from backend.services.context.news_cross_checker import NewsCrossChecker
 from backend.services.context.reverse_image_search import ReverseImageSearch
+from backend.services.context.semantic_analyzer import SemanticAnalyzer
 from backend.services.explainability.llm_narrator import narrate
 
 
@@ -46,6 +47,7 @@ class DetectionOrchestrator:
         # Context
         self.news_checker = None
         self.reverse_search = None
+        self.semantic_analyzer = None
 
     async def load_models(self):
         """Lazy-load all ML models and service instances."""
@@ -64,6 +66,7 @@ class DetectionOrchestrator:
             self.cdcf_engine = CDCFEngine()
             self.news_checker = NewsCrossChecker()
             self.reverse_search = ReverseImageSearch()
+            self.semantic_analyzer = SemanticAnalyzer()
             self.models_loaded = True
             logger.info("All models loaded successfully.")
             return True
@@ -88,6 +91,7 @@ class DetectionOrchestrator:
     async def _compute_mas(self, file_path: str, category: str) -> tuple:
         """Media Authenticity Score — primary deepfake detection."""
         findings = []
+        ltca_data = {}
         try:
             if category == "image":
                 score = await self.image_detector.predict_async(file_path)
@@ -105,16 +109,41 @@ class DetectionOrchestrator:
                 # We need to temporarily store LTCA data so process_media can inject it
                 # We'll attach it to the orchestrator instance temporarily (hacky but thread-safe enough for local testing, ideally should be mapped)
                 self._last_ltca_data = ltca_data
+                # Run 9-engine VideoOrchestrator (returns score, ltca_data, frames)
+                score, ltca_data, frames = await self.video_detector.process_video(file_path, num_frames=16)
+                ltca_data["frames"] = frames  # kept for internal semantic analysis, stripped before HTTP response
+
+                findings.append({
+                    "engine": "Spatio-Temporal-Analysis",
+                    "score": round(score, 1),
+                    "detail": "9-engine pipeline: ViT + Optical Flow + LTCA + DCT Artifact + Wavelet Noise + Blink + Face Mesh + Eye Reflection + Lip-Sync"
+                })
+
+                if ltca_data and ltca_data.get("is_fake"):
+                    findings.append({
+                        "engine": "Latent-Trajectory-Curvature",
+                        "score": round(ltca_data.get("confidence", 0), 1),
+                        "detail": ltca_data.get("reason", "Physics Violation Detected")
+                    })
+
+                # Merge per-engine advanced findings (Blink, Mesh, Reflect, LipSync)
+                for af in ltca_data.get("advanced_findings", []):
+                    findings.append(af)
+
+                self._last_ltca_data = ltca_data
+
             elif category == "audio":
                 score = await self.audio_detector.analyze(file_path)
                 findings.append({"engine": "Audio-Spoof-Detection", "score": round(score, 1),
                                  "detail": "AI Voice Clone / Synthetic Speech analysis"})
             else:
                 score = 50.0
+                ltca_data = {}
         except Exception as e:
             logger.warning(f"MAS computation error: {e}")
             score = 50.0
-        return round(score, 2), findings
+            ltca_data = {}
+        return round(score, 2), findings, ltca_data
 
     # ------------------------------------------------------------------ PPS
     async def _compute_pps(self, file_path: str, category: str) -> tuple:
@@ -167,16 +196,42 @@ class DetectionOrchestrator:
 
     # ------------------------------------------------------------------ AAS
     async def _compute_aas(self, file_path: str, category: str) -> tuple:
-        """Acoustic Anomaly Score — audio deepfake clues."""
+        """Acoustic Anomaly Score — 7-signature audio deepfake detection."""
         findings = []
         if category not in ("audio", "video"):
             return 0.0, [{"engine": "AudioAnalysis", "score": 0.0, "detail": "Skipped — no audio track"}]
         try:
+            full_result = await self.audio_detector.analyze_full(file_path)
+            score = full_result["score"]
+
+            # Build the primary finding with all data the frontend needs
+            finding = {
+                "engine": "AI-Audio-Scanner-7sig",
+                "score": round(score, 1),
+                "detail": f"7-signature audio analysis: {full_result.get('verdict', 'UNCERTAIN')}",
+                "spectrum": full_result.get("spectrum", []),
+                "anomalies": full_result.get("anomalies", []),
+                "splicing_detected": full_result.get("splicing_detected", False),
+                "clone_probability": full_result.get("clone_probability", round(score, 1)),
+                "signature_scores": full_result.get("signature_scores", {}),
+                "processing_time_ms": full_result.get("processing_time_ms", 0),
+            }
+            findings.append(finding)
+
+            # Add individual signature findings for the findings list
+            for f_text in full_result.get("findings", []):
+                findings.append({
+                    "engine": "AudioSignature",
+                    "score": round(score, 1),
+                    "detail": f_text,
+                })
+
             score = await self.audio_detector.analyze(file_path)
             findings.append({"engine": "AI-Audio-Scanner", "score": round(score, 1),
                              "detail": "Transformer-based voice cloning analysis"})
             return round(score, 2), findings
         except Exception as e:
+            logger.warning(f"AAS computation error: {e}")
             return 50.0, [{"engine": "AudioAnalysis", "score": 50.0, "detail": str(e)}]
 
     # ------------------------------------------------------------------ CVS
@@ -253,14 +308,38 @@ class DetectionOrchestrator:
 
         # ---------- Compute 5 sub-scores in parallel ----------
         # Run sub-scores concurrently
+        ltca_data_payload = {}
         try:
-            (mas, mas_f), (pps, pps_f), (irs, irs_f), (aas, aas_f), (cvs, cvs_f) = await asyncio.gather(
+            # We run MAS (detector) and other sub-scores
+            (mas, mas_f, ltca_data_payload), (pps, pps_f), (irs, irs_f), (aas, aas_f), (cvs, cvs_f) = await asyncio.gather(
                 self._compute_mas(file_path, category),
                 self._compute_pps(file_path, category),
                 self._compute_irs(file_path, category),
                 self._compute_aas(file_path, category),
                 self._compute_cvs(file_path, category),
             )
+            # EXTRA: Semantic Fact-Checking (Vision LLM + Fact Check API)
+            if category == "video" and ltca_data_payload.get("frames"):
+                frames = ltca_data_payload.get("frames")
+                try:
+                    semantic = await self.semantic_analyzer.describe_and_verify(frames)
+                    ltca_data_payload["semantic_analysis"] = semantic
+                    
+                    # Cross-check claims with Fact Check tools
+                    for claim in semantic.get("claims", []):
+                        verification = await self.news_checker.verify_with_api(claim)
+                        if verification.get("found"):
+                            rating = verification.get("first_rating", "Unknown").lower()
+                            if any(p in rating for p in ["false", "misleading", "fake", "manipulated"]):
+                                cvs_f.append({"engine": "Semantic-Fact-Check", "score": 98.0, 
+                                              "detail": f"DEEPFAKE CONTEXT: Claim '{claim}' flagged as {rating.upper()} by independent sources."})
+                                cvs = max(cvs, 98.0)
+                            elif any(p in rating for p in ["true", "correct", "accurate"]):
+                                cvs_f.append({"engine": "Semantic-Fact-Check", "score": 0.0, 
+                                              "detail": f"VERIFIED CONTEXT: Scene content corroborated as {rating.upper()}."})
+                except Exception as semantic_err:
+                    logger.warning(f"Semantic checking failed: {semantic_err}")
+
         except Exception as e:
             logger.error(f"Sub-score computation failed: {e}\n{traceback.format_exc()}")
             mas = pps = irs = aas = cvs = 50.0
@@ -276,6 +355,38 @@ class DetectionOrchestrator:
 
         # ---------- Forensics (non-blocking) ----------
         forensics = await self._run_forensics(file_path, category)
+
+        # ---------- Build response matching frontend shape ----------
+        # Extract heartbeat data from PPS findings if available
+        heartbeat_data = {}
+        for f in pps_f:
+            if f.get("engine") == "rPPG-Heartbeat":
+                heartbeat_data = {
+                    "heart_rate": f.get("heart_rate", 0),
+                    "confidence": f.get("confidence", 0),
+                    "signal": f.get("signal", []),
+                }
+                break
+
+        # ---------- NLM Forensic Report (Video Only) ----------
+        if category == "video":
+            from backend.services.explainability.video_nlm_report import VideoNLMReport
+            nlm_reporter = VideoNLMReport()
+            try:
+                # We now have access to both physics (ltca) AND biology (rppg) data here
+                nlm_text = await nlm_reporter.generate_report(
+                    mas_score=aacs_score,
+                    spatial_score=ltca_data_payload.get("spatial_score", 50.0),
+                    temporal_penalty=ltca_data_payload.get("temporal_penalty", 50.0),
+                    noise_score=ltca_data_payload.get("noise_score", 50.0),
+                    artifact_penalty=ltca_data_payload.get("artifact_penalty", 50.0),
+                    ltca_data=ltca_data_payload,
+                    rppg_data=heartbeat_data
+                )
+                ltca_data_payload["nlm_report"] = nlm_text
+            except Exception as e:
+                logger.error(f"Failed to generate Video NLM report: {e}")
+                ltca_data_payload["nlm_report"] = "Forensic NLM analysis failed due to system error."
 
         # ---------- LLM Narration (best-effort) ----------
         narrative = {"summary": "", "eli5": "", "detailed": "", "technical": ""}
@@ -307,6 +418,23 @@ class DetectionOrchestrator:
                     "signal": f.get("signal", []),
                 }
                 break
+
+        # ---------- Extract audio spectrum data from AAS findings ----------
+        audio_spectrum_data = {}
+        audio_signature_scores = {}
+        for f in aas_f:
+            if f.get("engine") in ("AI-Audio-Scanner-7sig", "AI-Audio-Scanner"):
+                audio_spectrum_data = {
+                    "spectrum": f.get("spectrum", []),
+                    "anomalies": f.get("anomalies", []),
+                    "splicing_detected": f.get("splicing_detected", False),
+                    "clone_probability": f.get("clone_probability", round(aas, 1)),
+                }
+                audio_signature_scores = f.get("signature_scores", {})
+                break
+        # Strip non-JSON-serializable objects before building the response
+        # (Raw video frames are NumPy arrays — they cannot be JSON encoded)
+        ltca_data_payload.pop("frames", None)
 
         return {
             "id": analysis_id,
@@ -340,18 +468,24 @@ class DetectionOrchestrator:
             },
             "findings": all_findings,
             "forensics": forensics,
-            "ltca_data": getattr(self, "_last_ltca_data", {}), # Injected for frontend Physics Graph
+            "ltca_data": getattr(self, "_last_ltca_data", {}),
+            "ltca_data": ltca_data_payload,
             "heartbeat": heartbeat_data,
             "narrative": narrative,
-            "gradcam": None,  # populated separately if image
+            "gradcam": None,
             "audio": {
-                "clone_probability": round(aas, 1) if category in ("audio", "video") else None,
-                "anomalies": [f.get("detail", "") for f in aas_f],
+                "clone_probability": audio_spectrum_data.get("clone_probability", round(aas, 1) if category in ("audio", "video") else None),
+                "spectrum": audio_spectrum_data.get("spectrum", []),
+                "splicing_detected": audio_spectrum_data.get("splicing_detected", False),
+                "anomalies": audio_spectrum_data.get("anomalies", []),
+                "signature_scores": audio_signature_scores,
             },
             "metadata": forensics.get("metadata", {}),
             "elapsed_seconds": elapsed,
+            "processing_time_ms": round(elapsed * 1000),
             "created_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
         }
+
 
 
 # Singleton

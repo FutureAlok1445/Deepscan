@@ -1,16 +1,16 @@
 import { useState, useCallback } from 'react';
 import { analyzeFile, analyzeUrl } from '../api/deepscan';
 
-const STEPS = [
-  'Validating file integrity...',
-  'Running ELA forensic analysis...',
-  'Analyzing audio spectrogram...',
-  'Running EfficientNet-B4 classification...',
-  'Extracting rPPG heartbeat signal...',
-  'Cross-domain consistency check (CDCF)...',
+const ANALYSIS_STEPS = [
+  'Extracting video keyframes...',
+  'Running FFT spatial analysis...',
+  'Analyzing optical flow (temporal)...',
+  'Noise fingerprint analysis...',
+  'Physics engine (LTCA) scan...',
+  'Cross-domain consistency check...',
   'Computing AACS confidence score...',
-  'Generating Hindi narration...',
-  'Preparing forensic report...',
+  'Generating forensic NLM report...',
+  'Finalizing report...',
 ];
 
 export default function useAnalysis() {
@@ -20,60 +20,89 @@ export default function useAnalysis() {
   const [progress, setProgress] = useState(0);
   const [currentStep, setCurrentStep] = useState('');
 
-  const simulateSteps = useCallback((apiPromise) => {
-    return new Promise((resolve) => {
-      setStatus('analyzing');
-      setProgress(0);
-      let step = 0;
-      const interval = setInterval(() => {
-        if (step < STEPS.length) {
-          setCurrentStep(STEPS[step]);
-          setProgress(Math.min(Math.round(((step + 1) / STEPS.length) * 95), 95));
-          step++;
-        } else {
-          clearInterval(interval);
-        }
-      }, 350);
+  const analyze = useCallback((file) => {
+    setStatus('uploading');
+    setError(null);
+    setResult(null);
+    setProgress(0);
+    setCurrentStep('Uploading file...');
 
-      apiPromise
-        .then((data) => {
-          clearInterval(interval);
-          setProgress(100);
-          setCurrentStep('Analysis complete.');
-          setResult(data);
-          setStatus('complete');
-          resolve(data);
-        })
-        .catch((err) => {
-          clearInterval(interval);
-          setError(err.message || 'Analysis failed');
-          setStatus('error');
-          resolve(null);
-        });
-    });
+    let analysisInterval = null;
+
+    // Called by axios during upload — shows real bytes transferred (0→50%)
+    const onUploadProgress = (evt) => {
+      if (evt.total) {
+        const uploadPct = Math.round((evt.loaded / evt.total) * 50);
+        setProgress(uploadPct);
+        const mb = (evt.loaded / 1024 / 1024).toFixed(1);
+        const total = (evt.total / 1024 / 1024).toFixed(1);
+        setCurrentStep(`Uploading: ${mb} / ${total} MB`);
+
+        if (evt.loaded >= evt.total) {
+          // Upload complete — switch to analysis steps (50→95%)
+          setStatus('analyzing');
+          setCurrentStep(ANALYSIS_STEPS[0]);
+          let step = 0;
+          analysisInterval = setInterval(() => {
+            if (step < ANALYSIS_STEPS.length) {
+              setCurrentStep(ANALYSIS_STEPS[step]);
+              setProgress(50 + Math.round(((step + 1) / ANALYSIS_STEPS.length) * 45));
+              step++;
+            } else {
+              clearInterval(analysisInterval);
+            }
+          }, 800);
+        }
+      }
+    };
+
+    const promise = analyzeFile(file, onUploadProgress);
+
+    promise
+      .then((data) => {
+        clearInterval(analysisInterval);
+        setProgress(100);
+        setCurrentStep('Analysis complete!');
+        setResult(data);
+        setStatus('complete');
+      })
+      .catch((err) => {
+        clearInterval(analysisInterval);
+        const msg = err?.response?.data?.detail
+          || err?.message
+          || 'Analysis failed. Please try again.';
+        setError(msg);
+        setStatus('error');
+      });
+
+    return promise;
   }, []);
 
-  const analyze = useCallback(
-    (file, language = 'hi') => {
-      setStatus('uploading');
-      setError(null);
-      setResult(null);
-      const promise = analyzeFile(file, language);
-      return simulateSteps(promise);
-    },
-    [simulateSteps]
-  );
+  const analyzeByUrl = useCallback((url) => {
+    setStatus('analyzing');
+    setError(null);
+    setResult(null);
+    setProgress(10);
+    setCurrentStep('Fetching media from URL...');
 
-  const analyzeByUrl = useCallback(
-    (url, language = 'hi') => {
-      setStatus('uploading');
-      setError(null);
-      setResult(null);
-      const promise = analyzeUrl(url, language);
-      return simulateSteps(promise);
-    },
-    [simulateSteps]
-  );
+    let step = 0;
+    const interval = setInterval(() => {
+      if (step < ANALYSIS_STEPS.length) {
+        setCurrentStep(ANALYSIS_STEPS[step]);
+        setProgress(10 + Math.round(((step + 1) / ANALYSIS_STEPS.length) * 85));
+        step++;
+      } else {
+        clearInterval(interval);
+      }
+    }, 600);
+
+    const promise = analyzeUrl(url);
+    promise
+      .then((data) => { clearInterval(interval); setProgress(100); setCurrentStep('Analysis complete!'); setResult(data); setStatus('complete'); })
+      .catch((err) => { clearInterval(interval); setError(err?.message || 'Analysis failed.'); setStatus('error'); });
+
+    return promise;
+  }, []);
 
   const reset = useCallback(() => {
     setStatus('idle');
@@ -89,7 +118,7 @@ export default function useAnalysis() {
     error,
     progress,
     currentStep,
-    steps: STEPS,
+    steps: ANALYSIS_STEPS,
     analyze,
     analyzeByUrl,
     reset,

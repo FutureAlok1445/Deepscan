@@ -82,6 +82,10 @@ source venv/bin/activate
 # Install dependencies
 pip install -r requirements.txt
 
+py -3.12 -m venv .venv
+.venv\Scripts\Activate.ps1
+pip install -r requirements.txt
+
 # Start the server
 cd ..
 python -m uvicorn backend.main:app --host 0.0.0.0 --port 8000 --reload
