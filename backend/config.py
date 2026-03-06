@@ -13,8 +13,11 @@ class Settings(BaseSettings):
     CLOUDINARY_CLOUD_NAME: str = ""
     CLOUDINARY_API_KEY: str = ""
     CLOUDINARY_API_SECRET: str = ""
+    TELEGRAM_WEBHOOK_URL: str = ""
+    NEWS_API_KEY: str = ""
     MAX_FILE_SIZE_MB: int = 500
     ALLOWED_EXTENSIONS: list = ["jpg", "png", "mp4", "wav", "mp3"]
+    HF_API_TOKEN: str = ""
 
     class Config:
         env_file = ".env"

@@ -6,7 +6,7 @@ import traceback
 from loguru import logger
 
 from backend.services.detection.image_detector import ImageDetector
-from backend.services.detection.video_detector import VideoDetector
+from backend.services.detection.video.video_orchestrator import VideoOrchestrator
 from backend.services.detection.audio_detector import AudioDetector
 from backend.services.detection.text_detector import TextDetector
 from backend.services.physiological.rppg_detector import RPPGDetector
@@ -54,7 +54,7 @@ class DetectionOrchestrator:
         logger.info("Loading ML models for Orchestrator...")
         try:
             self.image_detector = ImageDetector()
-            self.video_detector = VideoDetector()
+            self.video_detector = VideoOrchestrator()
             self.audio_detector = AudioDetector()
             self.text_detector = TextDetector()
             self.rppg_detector = RPPGDetector()
@@ -90,17 +90,25 @@ class DetectionOrchestrator:
         findings = []
         try:
             if category == "image":
-                score = self.image_detector.predict(file_path)
-                findings.append({"engine": "EfficientNet-B4", "score": round(score, 1),
-                                 "detail": "CNN-based spatial manipulation detection"})
+                score = await self.image_detector.predict_async(file_path)
+                findings.append({"engine": "Vision-Transformer-ViT", "score": round(score, 1),
+                                 "detail": "HuggingFace-backed spatial manipulation detection"})
             elif category == "video":
-                score = self.video_detector.process_video(file_path, num_frames=8)
-                findings.append({"engine": "VideoFrameAnalysis", "score": round(score, 1),
-                                 "detail": "Multi-frame temporal consistency check"})
+                # VideoDetector.process_video is now async and high-accuracy (Returns score, ltca_data)
+                score, ltca_data = await self.video_detector.process_video(file_path, num_frames=12)
+                findings.append({"engine": "Spatio-Temporal-Consistancy", "score": round(score, 1),
+                                 "detail": "ViT + SSIM/Optical Flow temporal analysis (Higgsfield-ready)"})
+                if ltca_data and ltca_data.get("is_fake"):
+                     findings.append({"engine": "Latent-Trajectory-Curvature", "score": round(ltca_data.get("confidence", 0), 1),
+                                      "detail": ltca_data.get("reason", "Physics Violation Detected")})
+                
+                # We need to temporarily store LTCA data so process_media can inject it
+                # We'll attach it to the orchestrator instance temporarily (hacky but thread-safe enough for local testing, ideally should be mapped)
+                self._last_ltca_data = ltca_data
             elif category == "audio":
-                score = self.audio_detector.analyze(file_path)
-                findings.append({"engine": "AudioMFCC", "score": round(score, 1),
-                                 "detail": "MFCC spectral feature analysis"})
+                score = await self.audio_detector.analyze(file_path)
+                findings.append({"engine": "Audio-Spoof-Detection", "score": round(score, 1),
+                                 "detail": "AI Voice Clone / Synthetic Speech analysis"})
             else:
                 score = 50.0
         except Exception as e:
@@ -134,24 +142,27 @@ class DetectionOrchestrator:
     async def _compute_irs(self, file_path: str, category: str) -> tuple:
         """Information Reliability Score — text/context verification."""
         findings = []
-        # Metadata cross-check
+        # Metadata check (using improved extractor with Pillow fallback)
         meta = self.metadata_extractor.extract(file_path)
         meta_score = 0.0
-        suspicious_keys = ["Adobe Photoshop", "GIMP", "FaceApp", "DeepFaceLab"]
-        software = str(meta.get("Software", ""))
-        if any(s.lower() in software.lower() for s in suspicious_keys):
-            meta_score = 60.0
-            findings.append({"engine": "MetadataCheck", "score": 60.0,
-                             "detail": f"Suspicious software detected: {software}"})
+        suspicious_keys = ["Adobe Photoshop", "GIMP", "FaceApp", "DeepFaceLab", "Midjourney", "DALL-E", "Stable Diffusion"]
+        
+        # Check software/comments for known AI strings
+        software = str(meta.get("Software", "")).lower()
+        if any(s.lower() in software for s in suspicious_keys):
+            meta_score = 75.0
+            findings.append({"engine": "MetadataCheck", "score": 75.0,
+                             "detail": f"AI Generation Software detected: {meta.get('Software')}"})
         else:
             findings.append({"engine": "MetadataCheck", "score": 0.0,
-                             "detail": "No suspicious metadata found"})
-        # News cross-check (lightweight — returns bool)
+                             "detail": "No suspicious metadata/software signatures found"})
+        
+        # News cross-check
         news_ok = self.news_checker.verify_event(f"file:{file_path}")
         if not news_ok:
             meta_score = max(meta_score, 40.0)
             findings.append({"engine": "NewsCrossCheck", "score": 40.0,
-                             "detail": "No matching credible news source found"})
+                             "detail": "No matching credible news source found for the event context"})
         return round(meta_score, 2), findings
 
     # ------------------------------------------------------------------ AAS
@@ -161,9 +172,9 @@ class DetectionOrchestrator:
         if category not in ("audio", "video"):
             return 0.0, [{"engine": "AudioAnalysis", "score": 0.0, "detail": "Skipped — no audio track"}]
         try:
-            score = self.audio_detector.analyze(file_path)
-            findings.append({"engine": "AudioMFCC", "score": round(score, 1),
-                             "detail": "Spectral analysis of audio track"})
+            score = await self.audio_detector.analyze(file_path)
+            findings.append({"engine": "AI-Audio-Scanner", "score": round(score, 1),
+                             "detail": "Transformer-based voice cloning analysis"})
             return round(score, 2), findings
         except Exception as e:
             return 50.0, [{"engine": "AudioAnalysis", "score": 50.0, "detail": str(e)}]
@@ -329,6 +340,7 @@ class DetectionOrchestrator:
             },
             "findings": all_findings,
             "forensics": forensics,
+            "ltca_data": getattr(self, "_last_ltca_data", {}), # Injected for frontend Physics Graph
             "heartbeat": heartbeat_data,
             "narrative": narrative,
             "gradcam": None,  # populated separately if image
