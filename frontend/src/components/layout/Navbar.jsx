@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import { Menu, X, Shield, Scan } from 'lucide-react';
+import useBackendStatus from '../../hooks/useBackendStatus';
 
 const NAV_LINKS = [
   { to: '/', label: 'Home' },
@@ -15,6 +16,7 @@ export default function Navbar({ transparent = false }) {
   const [open, setOpen] = useState(false);
   const [scrolled, setScrolled] = useState(false);
   const location = useLocation();
+  const { isOnline } = useBackendStatus(15000);
 
   useEffect(() => {
     const onScroll = () => setScrolled(window.scrollY > 40);
@@ -47,6 +49,13 @@ export default function Navbar({ transparent = false }) {
               <span className="text-ds-silver">SCAN</span>
               <span className="text-ds-red">]</span>
             </span>
+            {/* Backend status dot */}
+            <span
+              title={isOnline === null ? 'Checking backend...' : isOnline ? 'Backend online' : 'Backend offline'}
+              className={`ml-2 inline-block w-2 h-2 rounded-full transition-colors ${
+                isOnline === null ? 'bg-yellow-400 animate-pulse' : isOnline ? 'bg-green-400' : 'bg-red-500 animate-pulse'
+              }`}
+            />
           </Link>
 
           {/* Desktop Links */}

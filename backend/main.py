@@ -14,16 +14,27 @@ except ImportError:
 
 from backend.config import settings
 from backend.api.v1.endpoints import (
-    analyze, analyze_url, analyze_text, live_scan, history, report, community, webhook
+    analyze, analyze_url, analyze_image, analyze_text, live_scan, history, report, community, webhook, feedback
 )
 from backend.services.detection.orchestrator import orchestrator
+from backend.services.IMageDetector.orchestrator import image_orchestrator
 from backend.utils.rate_limiter import limiter
+from backend.db import models
+from backend.db.database import engine
 
 @contextlib.asynccontextmanager
 async def lifespan(app: FastAPI):
-    logger.info("Starting DeepScan API — loading models in background...")
-    # Fire and forget model loading to ensure instant server responsiveness
-    asyncio.create_task(orchestrator.load_models())
+    logger.info("Starting DeepScan API — loading models and initializing DB...")
+    try:
+        # Create database tables if they don't exist
+        models.Base.metadata.create_all(bind=engine)
+        logger.info("Database tables initialized")
+        
+        await orchestrator.load_models()
+        await image_orchestrator.load_models()
+        logger.info("All ML models loaded successfully")
+    except Exception as e:
+        logger.warning(f"Startup initialization failed: {e}")
     yield
     logger.info("Shutting down DeepScan API...")
 
@@ -36,10 +47,11 @@ app = FastAPI(
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=settings.cors_origins,
     allow_credentials=True,
-    allow_methods=["*"],
+    allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
     allow_headers=["*"],
+    expose_headers=["Content-Disposition"],
 )
 
 # Register SlowAPI rate limiter
@@ -68,6 +80,8 @@ app.include_router(live_scan.router, prefix="/ws", tags=["Live Scan"])
 app.include_router(history.router, prefix="/api/v1/history", tags=["History"])
 app.include_router(report.router, prefix="/api/v1/report", tags=["Report"])
 app.include_router(community.router, prefix="/api/v1/community", tags=["Community"])
+app.include_router(feedback.router, prefix="/api/v1/feedback", tags=["Feedback"])
+app.include_router(analyze_text.router, prefix="/api/v1/analyze/text", tags=["Text Analysis"])
 app.include_router(webhook.router, prefix="/webhook", tags=["Webhook"])
 
 @app.get("/health", tags=["Health"])

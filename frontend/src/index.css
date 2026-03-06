@@ -23,6 +23,8 @@ body {
   color: var(--silver);
   font-family: var(--font-heading);
   overflow-x: hidden;
+  -webkit-text-size-adjust: 100%;
+  -webkit-tap-highlight-color: transparent;
 }
 
 html { scroll-behavior: smooth; }
@@ -30,6 +32,27 @@ html { scroll-behavior: smooth; }
 ::-webkit-scrollbar { width: 4px; }
 ::-webkit-scrollbar-track { background: var(--bg); }
 ::-webkit-scrollbar-thumb { background: var(--red); }
+
+/* ═══ Mobile-first responsive utilities ═══ */
+@media (max-width: 640px) {
+  .brutal-shadow { box-shadow: 4px 4px 0 #000000; }
+  .brutal-shadow:hover { box-shadow: 6px 6px 0 #000000; }
+  .card-hover-lift:hover { transform: translateY(-2px); box-shadow: 6px 6px 0 #000000; }
+  .neon-red { text-shadow: 0 0 6px #ff3c00, 0 0 15px rgba(255, 60, 0, 0.6); }
+  .neon-cyan { text-shadow: 0 0 6px #00f5ff, 0 0 15px rgba(0, 245, 255, 0.6); }
+  .neon-green { text-shadow: 0 0 6px #39ff14, 0 0 15px rgba(57, 255, 20, 0.6); }
+  .neon-yellow { text-shadow: 0 0 6px #ffd700, 0 0 15px rgba(255, 215, 0, 0.6); }
+}
+
+/* Fix for iOS safe areas */
+@supports (padding: max(0px)) {
+  body { padding-left: env(safe-area-inset-left); padding-right: env(safe-area-inset-right); }
+}
+
+/* Touch-friendly targets */
+@media (pointer: coarse) {
+  button, a, [role="button"] { min-height: 44px; min-width: 44px; }
+}
 
 /* ═══ Keyframe Animations ═══ */
 
