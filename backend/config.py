@@ -16,7 +16,7 @@ class Settings(BaseSettings):
     JWT_SECRET: str = "change-this-to-random-64-char-secret"
     JWT_EXPIRE_HOURS: str = "24"
     ANTHROPIC_API_KEY: str = ""
-    HF_API_TOKEN: str = ""
+    HF_API_TOKEN: str = "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"
     HUGGINGFACE_API_KEY: str = ""
     GROQ_API_KEY: str = ""
     TELEGRAM_BOT_TOKEN: str = ""
@@ -27,6 +27,7 @@ class Settings(BaseSettings):
     MAX_FILE_SIZE_MB: str = "500"
     ALLOWED_EXTENSIONS: list = ["jpg", "png", "mp4", "wav", "mp3"]
     NEWS_API_KEY: str = ""
+    SAPLING_API_KEY: str = "WiThm47XLf39l57MORZ1wgAv4ntE0_8qy7c2rWLC7g0nFeCXydkZTsEjtNnQX2gSmKjFhBfYRtolA6_M2-T2og=="
     TELEGRAM_WEBHOOK_URL: str = ""
 
     model_config = SettingsConfigDict(
@@ -36,14 +37,6 @@ class Settings(BaseSettings):
     )
 
 settings = Settings()
-    HF_API_TOKEN: str = ""
-    GROQ_API_KEY: str = ""
-
-    model_config = SettingsConfigDict(
-        env_file=".env",
-        extra="ignore",
-        case_sensitive=False
-    )
 
 # Also inject into os.environ so modules that read os.getenv() directly can see them
 if settings.HF_API_TOKEN:

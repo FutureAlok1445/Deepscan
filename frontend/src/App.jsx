@@ -9,6 +9,7 @@ import Result from './pages/Result'
 import History from './pages/History'
 import Learn from './pages/Learn'
 import Community from './pages/Community'
+import TextAnalyze from './pages/TextAnalyze'
 
 function ScrollProgress() {
   const [width, setWidth] = useState(0)
@@ -55,6 +56,7 @@ export default function App() {
           <Route path="/history" element={<History />} />
           <Route path="/learn" element={<Learn />} />
           <Route path="/community" element={<Community />} />
+          <Route path="/analyze/text" element={<TextAnalyze />} />
         </Routes>
       </main>
       <Footer />

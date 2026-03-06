@@ -5,6 +5,7 @@ import { Menu, X, Shield, Scan } from 'lucide-react';
 const NAV_LINKS = [
   { to: '/', label: 'Home' },
   { to: '/analyze', label: 'Analyze' },
+  { to: '/analyze/text', label: 'Text Scan' },
   { to: '/history', label: 'History' },
   { to: '/learn', label: 'Learn' },
   { to: '/community', label: 'Community' },
@@ -27,11 +28,10 @@ export default function Navbar({ transparent = false }) {
 
   return (
     <nav
-      className={`fixed top-0 left-0 right-0 z-50 transition-all duration-300 ${
-        showSolid
+      className={`fixed top-0 left-0 right-0 z-50 transition-all duration-300 ${showSolid
           ? 'bg-ds-bg/95 backdrop-blur-md border-b-3 border-ds-silver/20'
           : 'bg-transparent border-b border-transparent'
-      }`}
+        }`}
     >
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="flex items-center justify-between h-16">
@@ -55,11 +55,10 @@ export default function Navbar({ transparent = false }) {
               <Link
                 key={to}
                 to={to}
-                className={`px-3 py-2 text-sm font-mono uppercase tracking-wider transition-colors ${
-                  location.pathname === to
+                className={`px-3 py-2 text-sm font-mono uppercase tracking-wider transition-colors ${location.pathname === to
                     ? 'text-ds-red border-b-2 border-ds-red'
                     : 'text-ds-silver/70 hover:text-ds-silver'
-                }`}
+                  }`}
               >
                 {label}
               </Link>
@@ -91,9 +90,8 @@ export default function Navbar({ transparent = false }) {
               <Link
                 key={to}
                 to={to}
-                className={`block px-3 py-3 font-mono uppercase tracking-wider text-sm border-b border-ds-silver/20 ${
-                  location.pathname === to ? 'text-ds-red' : 'text-ds-silver/70'
-                }`}
+                className={`block px-3 py-3 font-mono uppercase tracking-wider text-sm border-b border-ds-silver/20 ${location.pathname === to ? 'text-ds-red' : 'text-ds-silver/70'
+                  }`}
               >
                 {label}
               </Link>

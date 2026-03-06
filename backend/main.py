@@ -1,4 +1,5 @@
 import contextlib
+import asyncio
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
@@ -13,19 +14,16 @@ except ImportError:
 
 from backend.config import settings
 from backend.api.v1.endpoints import (
-    analyze, analyze_url, live_scan, history, report, community, webhook
+    analyze, analyze_url, analyze_text, live_scan, history, report, community, webhook
 )
 from backend.services.detection.orchestrator import orchestrator
 from backend.utils.rate_limiter import limiter
 
 @contextlib.asynccontextmanager
 async def lifespan(app: FastAPI):
-    logger.info("Starting DeepScan API — loading models...")
-    try:
-        await orchestrator.load_models()
-        logger.info("All ML models loaded successfully")
-    except Exception as e:
-        logger.warning(f"Model preload failed (will lazy-load): {e}")
+    logger.info("Starting DeepScan API — loading models in background...")
+    # Fire and forget model loading to ensure instant server responsiveness
+    asyncio.create_task(orchestrator.load_models())
     yield
     logger.info("Shutting down DeepScan API...")
 
@@ -65,6 +63,7 @@ async def global_exception_handler(request: Request, exc: Exception):
 
 app.include_router(analyze.router, prefix="/api/v1/analyze", tags=["Analyze"])
 app.include_router(analyze_url.router, prefix="/api/v1/analyze", tags=["Analyze URL"])
+app.include_router(analyze_text.router, prefix="/api/v1/analyze/text", tags=["Analyze Text"])
 app.include_router(live_scan.router, prefix="/ws", tags=["Live Scan"])
 app.include_router(history.router, prefix="/api/v1/history", tags=["History"])
 app.include_router(report.router, prefix="/api/v1/report", tags=["Report"])
