@@ -22,6 +22,7 @@ import AudioSpectrum from '../components/analysis/AudioSpectrum';
 import TrajectoryPlot from '../components/analysis/TrajectoryPlot';
 import GrokNLMAnalysis from '../components/analysis/GrokNLMAnalysis';
 import DetectionBreakdown from '../components/analysis/DetectionBreakdown';
+import VideoDescription from '../components/analysis/VideoDescription';
 import ShareVerdict from '../components/accessibility/ShareVerdict';
 import DownloadReport from '../components/accessibility/DownloadReport';
 
@@ -170,6 +171,13 @@ export default function Result() {
               findings={result.findings || []}
               ltcaData={result.ltca_data || {}}
             />
+          </div>
+        )}
+
+        {/* AI Video Content Description */}
+        {result.ltca_data?.video_description && (
+          <div className="result-section">
+            <VideoDescription videoDescription={result.ltca_data.video_description} />
           </div>
         )}
 
