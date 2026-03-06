@@ -1,0 +1,25 @@
+{
+  "score": 42.5,
+  "findings": [
+    {
+      "engine": "Vision-Transformer-ViT",
+      "score": 50.0,
+      "detail": "HuggingFace API unavailable or error"
+    },
+    {
+      "engine": "Face-XRay-Blend-Boundary",
+      "score": 15.0,
+      "detail": "Natural facial chrominance transitions (Var=17.2)"
+    },
+    {
+      "engine": "Error-Level-Analysis",
+      "score": 65.0,
+      "detail": "Low compression noise variation (StdDev=1.28) - Suspiciously smooth"
+    },
+    {
+      "engine": "High-Freq-Noise-PRNU",
+      "score": 20.0,
+      "detail": "Natural sensor noise levels detected (Var=35.16)"
+    }
+  ]
+}

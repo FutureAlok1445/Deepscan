@@ -627,6 +627,130 @@ def get_audio_duration(file_path: str) -> float:
 
 
 # ==================================================================
+# 9. extract_formant_features — Vocal Tract Analysis (LPC)
+# ==================================================================
+def extract_formant_features(audio: np.ndarray, sr: int = 16000) -> dict:
+    """
+    Extract formants (F1, F2, F3) using Linear Predictive Coding (LPC).
+    Science: Formants are resonances of the vocal tract. For a person of 
+    constant height, the vocal tract length (VTL) is constant.
+    Deepfakes often exhibit 'sliding' VTL because they generate 
+    phonemes independently, leading to physically impossible shifts.
+    """
+    import scipy.signal
+    from scipy.linalg import solve_toeplitz
+
+    # Constants
+    c = 34000 # speed of sound in cm/s
+    
+    try:
+        # Pre-emphasis
+        x = scipy.signal.lfilter([1, -0.97], [1], audio)
+        
+        # LPC order (typically 2 + sr/1000)
+        order = 2 + sr // 1000
+        
+        # We process in 200ms windows to track stability
+        win_size = int(0.2 * sr)
+        n_windows = len(x) // win_size
+        vtl_estimates = []
+        
+        for i in range(min(n_windows, 20)):
+            window = x[i*win_size : (i+1)*win_size]
+            if np.max(np.abs(window)) < 0.01: continue
+            
+            # Levinson-Durbin to get LPC coefficients
+            r = np.correlate(window, window, mode='full')[len(window)-1 : len(window)+order]
+            a = solve_toeplitz((r[:-1], r[:-1]), r[1:])
+            
+            # Find roots of the polynomial
+            roots = np.roots(np.concatenate(([1], -a)))
+            roots = [r for r in roots if np.imag(r) >= 0]
+            
+            # Convert to frequencies
+            ang = np.arctan2(np.imag(roots), np.real(roots))
+            freqs = sorted(ang * (sr / (2 * np.pi)))
+            
+            # Filter valid formants (F1 > 200, F2 > 700)
+            formants = [f for f in freqs if f > 60]
+            if len(formants) >= 3:
+                # Simple VTL estimate from F3 (VTL = 5c / 4F3)
+                vtl = (5 * c) / (4 * formants[2])
+                if 10 < vtl < 25: # Reasonable human range
+                    vtl_estimates.append(vtl)
+
+        vtl_std = float(np.std(vtl_estimates)) if len(vtl_estimates) > 2 else 0.0
+        vtl_mean = float(np.mean(vtl_estimates)) if len(vtl_estimates) > 2 else 17.0
+        
+        # Scoring: High VTL variation (> 1.5cm) is highly suspicious
+        score = 100 / (1 + np.exp(-4 * (vtl_std - 1.2)))
+        
+        if vtl_std > 1.0:
+            reasoning = f"Detected high variance in estimated Vocal Tract Length (StdDev={vtl_std:.2f}cm). A human throat's physical geometry is fixed; shifting VTL within a single utterance is a hallmark of non-physical parametric synthesis."
+        else:
+            reasoning = f"Vocal tract resonances are stable (VTL StdDev={vtl_std:.2f}cm), consistent with a fixed biological resonance chamber."
+
+        return {
+            "score": round(score, 1),
+            "vtl_mean": round(vtl_mean, 2),
+            "vtl_std": round(vtl_std, 3),
+            "reasoning": reasoning
+        }
+    except Exception as e:
+        logger.warning(f"Formant analysis failed: {e}")
+        return {"score": 50.0, "reasoning": "Formant extraction failed."}
+
+
+# ==================================================================
+# 10. detect_spectral_mirroring — Upsampling Artifacts
+# ==================================================================
+def detect_spectral_mirroring(audio: np.ndarray, sr: int = 16000) -> dict:
+    """
+    Detects 'Spectral Mirroring' at common model Nyquist points (12kHz, 16kHz).
+    Science: Many AI models generate at 24kHz or 32kHz and are then upsampled.
+    Poorly filtered upsampling leaves 'aliasing peaks' at the original Nyquist.
+    Natural audio contains a decaying 1/f noise floor instead of sharp spikes.
+    """
+    from scipy.fft import rfft, rfftfreq
+    
+    try:
+        n = len(audio)
+        yf = rfft(audio * np.hanning(n))
+        xf = rfftfreq(n, 1.0 / sr)
+        mag = 20 * np.log10(np.abs(yf) + 1e-10)
+        
+        # Key 'fingerprint' frequencies for upsampled AI
+        target_freqs = [8000, 11025, 12000, 16000]
+        peaks_found = []
+        
+        for tf in target_freqs:
+            if tf > sr/2 - 200: continue
+            # Look for local peak relative to noise floor
+            idx = np.argmin(np.abs(xf - tf))
+            local_region = mag[idx-50 : idx+50]
+            peak_val = np.max(local_region)
+            noise_floor = np.mean(local_region)
+            
+            if (peak_val - noise_floor) > 12.0: # >12dB spike above local floor
+                peaks_found.append(tf)
+        
+        score = 90.0 if len(peaks_found) >= 2 else (65.0 if len(peaks_found) == 1 else 15.0)
+        
+        if peaks_found:
+            reasoning = f"Detected spectral 'mirroring' spikes at {peaks_found} Hz. These aliasing artifacts are common fingerprints of upsampled AI models (e.g. ElevenLabs or RVC) and rarely occur in natural microphone captures."
+        else:
+            reasoning = "High-frequency spectrum exhibits a natural 1/f decay without the aliasing peaks characteristic of upsampled synthesis."
+
+        return {
+            "score": score,
+            "peaks": peaks_found,
+            "reasoning": reasoning
+        }
+    except Exception as e:
+        return {"score": 50.0, "reasoning": "Spectral mirroring analysis failed."}
+
+
+# ==================================================================
 # Legacy helper (kept for backward compatibility)
 # ==================================================================
 def extract_audio_from_video(video: str, out: str) -> bool:

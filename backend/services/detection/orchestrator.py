@@ -94,21 +94,9 @@ class DetectionOrchestrator:
         ltca_data = {}
         try:
             if category == "image":
-                score = await self.image_detector.predict_async(file_path)
-                findings.append({"engine": "Vision-Transformer-ViT", "score": round(score, 1),
-                                 "detail": "HuggingFace-backed spatial manipulation detection"})
+                score, img_findings = await self.image_detector.predict_async(file_path)
+                findings.extend(img_findings)
             elif category == "video":
-                # VideoDetector.process_video is now async and high-accuracy (Returns score, ltca_data)
-                score, ltca_data = await self.video_detector.process_video(file_path, num_frames=12)
-                findings.append({"engine": "Spatio-Temporal-Consistancy", "score": round(score, 1),
-                                 "detail": "ViT + SSIM/Optical Flow temporal analysis (Higgsfield-ready)"})
-                if ltca_data and ltca_data.get("is_fake"):
-                     findings.append({"engine": "Latent-Trajectory-Curvature", "score": round(ltca_data.get("confidence", 0), 1),
-                                      "detail": ltca_data.get("reason", "Physics Violation Detected")})
-                
-                # We need to temporarily store LTCA data so process_media can inject it
-                # We'll attach it to the orchestrator instance temporarily (hacky but thread-safe enough for local testing, ideally should be mapped)
-                self._last_ltca_data = ltca_data
                 # Run 9-engine VideoOrchestrator (returns score, ltca_data, frames)
                 score, ltca_data, frames = await self.video_detector.process_video(file_path, num_frames=16)
                 ltca_data["frames"] = frames  # kept for internal semantic analysis, stripped before HTTP response

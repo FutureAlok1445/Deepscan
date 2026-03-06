@@ -39,16 +39,18 @@ from backend.services.forensics.spectrogram_analyzer import (
 
 
 # =====================================================================
-# WEIGHTS — Sum to 1.0
+# WEIGHTS — Phase 8: 9-Signature Pipeline
 # =====================================================================
 WEIGHTS = {
-    "f0": 0.25,
-    "mfcc": 0.20,
-    "spectral": 0.20,
-    "breathing": 0.15,
-    "phase": 0.10,
-    "hf": 0.05,
-    "groq": 0.05,
+    "f0": 0.20,         # Fundamental frequency stability
+    "vtl": 0.15,        # Vocal Tract Length consistency (NEW)
+    "spectral": 0.15,   # Spectrogram texture & vocoder patterns
+    "mirroring": 0.10,  # Spectral mirroring artifacts (NEW)
+    "mfcc": 0.15,       # Articulatory dynamics
+    "breathing": 0.10,  # Micro-silence & breathing
+    "phase": 0.05,      # STFT phase discontinuities
+    "hf": 0.05,         # External ViT/Wav2Vec models
+    "groq": 0.05,       # Semantic/Transcript analysis
 }
 
 
@@ -61,14 +63,7 @@ def _clamp(score: float) -> float:
 
 
 def _compute_weighted_aas(scores: dict) -> float:
-    """Compute the weighted Audio Authenticity Score.
-
-    Args:
-        scores: dict mapping signature name → score (0-100)
-
-    Returns:
-        Weighted average score 0-100
-    """
+    """Compute the weighted Audio Authenticity Score."""
     total = 0.0
     weight_sum = 0.0
     for key, weight in WEIGHTS.items():
@@ -77,87 +72,53 @@ def _compute_weighted_aas(scores: dict) -> float:
             weight_sum += weight
 
     if weight_sum > 0:
-        # Normalize in case some signatures failed
         return _clamp(total / weight_sum * sum(WEIGHTS.values()))
     return 50.0
 
 
 def _generate_findings(scores: dict, details: dict) -> list:
-    """Generate human-readable findings from all 7 signatures."""
+    """
+    Generate structured findings with reasoning.
+    Returns a list of dicts: {"engine": str, "score": float, "detail": str, "reasoning": str}
+    """
     findings = []
 
-    # F0
-    f0 = details.get("f0", {})
-    f0_score = scores.get("f0", 50.0)
-    if f0_score >= 70:
-        findings.append(f"F0 pitch is abnormally stable (CoV={f0.get('f0_stability', 0):.4f}, jitter={f0.get('jitter', 0):.5f}) — consistent with AI synthesis")
-    elif f0_score <= 30:
-        findings.append(f"F0 pitch shows natural variation (CoV={f0.get('f0_stability', 0):.4f}) — consistent with real speech")
-    else:
-        findings.append(f"F0 pitch stability is ambiguous (CoV={f0.get('f0_stability', 0):.4f})")
+    # Mapping of score keys to display names and logic
+    engine_map = {
+        "f0": "F0-Stability-Analysis",
+        "vtl": "Vocal-Tract-Consistency",
+        "spectral": "Spectrogram-Texture",
+        "mirroring": "Spectral-Mirroring-Check",
+        "mfcc": "MFCC-Articulatory-Dynamics",
+        "breathing": "Breathing-Silence-Pattern",
+        "phase": "Phase-Discontinuity-Detector",
+        "hf": "HuggingFace-Wav2Vec2",
+        "groq": "Groq-Transcript-Linguistic",
+    }
 
-    # MFCC
-    mfcc = details.get("mfcc", {})
-    mfcc_score = scores.get("mfcc", 50.0)
-    if mfcc_score >= 70:
-        findings.append(f"MFCC delta variance is low ({mfcc.get('delta_var', 0):.3f}) — articulatory dynamics appear synthetic")
-    elif mfcc_score <= 30:
-        findings.append(f"MFCC deltas show natural articulatory variation ({mfcc.get('delta_var', 0):.3f})")
-    else:
-        findings.append(f"MFCC delta patterns are inconclusive ({mfcc.get('delta_var', 0):.3f})")
+    for key, engine_name in engine_map.items():
+        score = scores.get(key, 50.0)
+        detail_data = details.get(key, {})
+        
+        # Pull reasoning from the sub-module result if available
+        reasoning = detail_data.get("reasoning", "")
+        detail_str = detail_data.get("detail", "")
+        
+        if not reasoning:
+            # Fallback reasoning for engines that don't provide it yet
+            if key == "hf":
+                reasoning = "External inference via HuggingFace transformers (wav2vec2), matching acoustic signatures against known synthetic manifolds."
+            elif key == "groq":
+                reasoning = detail_data.get("analysis_summary", "Linguistic analysis of transcript patterns (filler words, disfluencies, and robotic phrasing).")
+            else:
+                reasoning = f"Analysis of {engine_name} parameters to identify statistical deviations from natural human speech."
 
-    # Spectral
-    spectral_score = scores.get("spectral", 50.0)
-    spec_synth = details.get("spectrogram_synthesis", {})
-    vocoder = details.get("vocoder_patterns", {})
-    if spectral_score >= 70:
-        parts = []
-        if vocoder.get("has_periodic_artifacts"):
-            parts.append("periodic vocoder artifacts detected")
-        if spec_synth.get("harmonic_ratio", 0) > 0.9:
-            parts.append(f"abnormal harmonic ratio ({spec_synth.get('harmonic_ratio', 0):.3f})")
-        finding = "Spectrogram analysis: " + (", ".join(parts) if parts else "synthesis patterns detected")
-        findings.append(finding)
-    elif spectral_score <= 30:
-        findings.append("Spectrogram texture appears natural — no vocoder fingerprints")
-    else:
-        findings.append("Spectral texture analysis is inconclusive")
-
-    # Breathing
-    breath = details.get("breathing", {})
-    breath_score = scores.get("breathing", 50.0)
-    if breath_score >= 70:
-        findings.append(f"Missing natural breathing patterns (energy ratio={breath.get('breathing_energy_ratio', 0):.4f}, silence count={breath.get('silence_count', 0)})")
-    elif breath_score <= 30:
-        findings.append("Natural breathing and micro-pauses detected")
-    else:
-        findings.append(f"Breathing/silence patterns are ambiguous ({breath.get('silence_count', 0)} pauses)")
-
-    # Phase
-    phase = details.get("phase", {})
-    phase_score = scores.get("phase", 50.0)
-    if phase_score >= 65:
-        findings.append(f"Phase discontinuities detected ({phase.get('discontinuity_ratio', 0):.3f} ratio) — potential vocoder reconstruction artifact")
-    elif phase_score <= 30:
-        findings.append("Phase continuity is natural")
-
-    # HuggingFace
-    hf_score = scores.get("hf", 50.0)
-    if hf_score is not None and hf_score != 50.0:
-        if hf_score >= 60:
-            findings.append(f"HuggingFace wav2vec2 model classifies audio as likely AI-generated (score={hf_score:.1f})")
-        elif hf_score <= 35:
-            findings.append(f"HuggingFace wav2vec2 model classifies audio as likely real (score={hf_score:.1f})")
-
-    # Groq
-    groq_score = scores.get("groq", 50.0)
-    groq_detail = details.get("groq", {})
-    if groq_score is not None and groq_score != 50.0:
-        reason = groq_detail.get("analysis_summary", "")
-        if groq_score >= 60:
-            findings.append(f"Groq Llama analysis flags suspicious transcript patterns" + (f": {reason}" if reason else ""))
-        elif groq_score <= 35:
-            findings.append("Groq Llama transcript analysis found no AI indicators")
+        findings.append({
+            "engine": engine_name,
+            "score": round(score, 1),
+            "detail": detail_str if detail_str else f"Score: {score:.1f}",
+            "reasoning": reasoning
+        })
 
     return findings
 
@@ -436,30 +397,32 @@ async def detect_audio(file_path: str) -> dict:
         - processing_time_ms: int
     """
     start_time = time.time()
-    logger.info(f"AudioDetector: Starting 7-signature analysis on {os.path.basename(file_path)}")
+    logger.info(f"AudioDetector: Starting 9-signature analysis on {os.path.basename(file_path)}")
 
     # ─── Step 1: Load Audio ───
     try:
+        from backend.utils.audio_utils import (
+            extract_formant_features,
+            detect_spectral_mirroring
+        )
         audio, sr = load_audio(file_path, sr=16000)
         duration = len(audio) / sr
-        logger.info(f"AudioDetector: Loaded audio — {duration:.1f}s, {sr}Hz, {len(audio)} samples")
+        logger.info(f"AudioDetector: Loaded audio — {duration:.1f}s, {sr}Hz")
     except Exception as e:
         logger.error(f"AudioDetector: Failed to load audio: {e}")
         return _build_error_response(str(e), time.time() - start_time)
 
-    if len(audio) < sr * 0.5:  # Less than 0.5 seconds
-        logger.warning("AudioDetector: Audio too short for reliable analysis")
-        return _build_error_response("Audio too short (< 0.5 seconds)", time.time() - start_time)
+    if len(audio) < sr * 0.5:
+        return _build_error_response("Audio too short (< 0.5s)", time.time() - start_time)
 
-    # ─── Step 2: Run all 7 signatures ───
+    # ─── Step 2: Run all 9 signatures ───
     loop = asyncio.get_running_loop()
-    scores = {}
-    details = {}
+    scores, details = {}, {}
 
-    # --- Signatures 1-5 run in thread pool (CPU-bound) ---
     try:
-        (f0_result, mfcc_result, spectral_result, breathing_result, phase_result,
-         spec_synth_result, vocoder_result, spectrum_data, spectrogram_png) = await asyncio.gather(
+        (f0_res, mfcc_res, spectral_base, breathing_res, phase_res,
+         spec_synth, vocoder_res, vtl_res, mirroring_res, 
+         spectrum_data, spectrogram_png) = await asyncio.gather(
             loop.run_in_executor(None, extract_f0, audio, sr),
             loop.run_in_executor(None, extract_mfcc_features, audio, sr),
             loop.run_in_executor(None, extract_spectral_features, audio, sr),
@@ -467,106 +430,56 @@ async def detect_audio(file_path: str) -> dict:
             loop.run_in_executor(None, compute_phase_features, audio, sr),
             loop.run_in_executor(None, analyze_spectrogram_for_synthesis, audio, sr),
             loop.run_in_executor(None, check_for_gan_vocoder_patterns, audio, sr),
+            loop.run_in_executor(None, extract_formant_features, audio, sr),
+            loop.run_in_executor(None, detect_spectral_mirroring, audio, sr),
             loop.run_in_executor(None, _build_spectrum_data, audio, sr),
             loop.run_in_executor(None, generate_spectrogram_image, audio, sr),
         )
     except Exception as e:
-        logger.error(f"AudioDetector: Signal analysis failed: {e}\n{traceback.format_exc()}")
-        f0_result = {"score": 50.0}
-        mfcc_result = {"score": 50.0}
-        spectral_result = {"score": 50.0}
-        breathing_result = {"score": 50.0}
-        phase_result = {"score": 50.0}
-        spec_synth_result = {"score": 50.0}
-        vocoder_result = {"score": 50.0}
-        spectrum_data = []
-        spectrogram_png = b""
+        logger.error(f"Signal analysis failed: {e}")
+        return _build_error_response(f"Signal Analysis Error: {e}", time.time() - start_time)
 
-    scores["f0"] = f0_result.get("score", 50.0)
-    scores["mfcc"] = mfcc_result.get("score", 50.0)
-    scores["breathing"] = breathing_result.get("score", 50.0)
-    scores["phase"] = phase_result.get("score", 50.0)
+    # Populate 9-engine scores
+    scores["f0"] = f0_res.get("score", 50.0)
+    scores["mfcc"] = mfcc_res.get("score", 50.0)
+    scores["breathing"] = breathing_res.get("score", 50.0)
+    scores["phase"] = phase_res.get("score", 50.0)
+    scores["vtl"] = vtl_res.get("score", 50.0)
+    scores["mirroring"] = mirroring_res.get("score", 50.0)
 
-    # Spectral score = average of basic spectral + spectrogram synthesis + vocoder patterns
-    spectral_base = spectral_result.get("score", 50.0)
-    synth_score = spec_synth_result.get("score", 50.0)
-    vocoder_score = vocoder_result.get("score", 50.0)
-    scores["spectral"] = _clamp((spectral_base * 0.35 + synth_score * 0.35 + vocoder_score * 0.30))
+    # Spectral score (consensus of 3 spectral sub-modules)
+    scores["spectral"] = _clamp((spectral_base.get("score", 50)*0.3 + spec_synth.get("score", 50)*0.4 + vocoder_res.get("score", 50)*0.3))
 
-    details["f0"] = f0_result
-    details["mfcc"] = mfcc_result
-    details["spectral_basic"] = spectral_result
-    details["spectrogram_synthesis"] = spec_synth_result
-    details["vocoder_patterns"] = vocoder_result
-    details["breathing"] = breathing_result
-    details["phase"] = phase_result
+    # Details
+    details["f0"] = f0_res
+    details["vtl"] = vtl_res
+    details["mirroring"] = mirroring_res
+    details["mfcc"] = mfcc_res
+    details["spectral"] = {"detail": f"HPSS: {spec_synth.get('score', 0):.0f}, GAN: {vocoder_res.get('score', 0):.0f}"}
+    details["breathing"] = breathing_res
+    details["phase"] = phase_res
 
-    # --- Signature 6: HuggingFace (network I/O) ---
-    try:
-        hf_score = await _query_huggingface_audio(file_path)
-        scores["hf"] = hf_score
-    except Exception as e:
-        logger.warning(f"AudioDetector: HuggingFace query failed: {e}")
-        scores["hf"] = 50.0
+    # --- Signature 6/7: Network APIs ---
+    hf_score = await _query_huggingface_audio(file_path)
+    scores["hf"] = hf_score
+    details["hf"] = {"score": hf_score, "detail": "wav2vec2-deepfake-transformer"}
 
-    # --- Signature 7: Groq Whisper + Llama (network I/O) ---
-    try:
-        transcript = await _transcribe_with_groq(file_path)
-        if transcript:
-            groq_result = await _analyze_transcript_with_groq(transcript)
-            scores["groq"] = groq_result.get("score", 50.0)
-            details["groq"] = groq_result
-            details["groq"]["transcript_preview"] = transcript[:300]
-        else:
-            scores["groq"] = 50.0
-            details["groq"] = {"score": 50.0, "analysis_summary": "No transcript available"}
-    except Exception as e:
-        logger.warning(f"AudioDetector: Groq analysis failed: {e}")
-        scores["groq"] = 50.0
-        details["groq"] = {"score": 50.0, "analysis_summary": f"Failed: {str(e)[:80]}"}
-
-    # ─── Step 3: Compute Weighted AAS ───
-    aas_score = _compute_weighted_aas(scores)
-
-    # ─── Step 4: Generate verdict ───
-    if aas_score >= 70:
-        verdict = "LIKELY AI-GENERATED"
-    elif aas_score >= 45:
-        verdict = "UNCERTAIN"
+    transcript = await _transcribe_with_groq(file_path)
+    if transcript:
+        groq_result = await _analyze_transcript_with_groq(transcript)
+        scores["groq"] = groq_result.get("score", 50.0)
+        details["groq"] = groq_result
     else:
-        verdict = "LIKELY REAL"
+        scores["groq"] = 50.0
+        details["groq"] = {"score": 50.0, "analysis_summary": "No transcript available"}
 
-    # ─── Step 5: Generate findings ───
-    findings = _generate_findings(scores, details)
 
-    # ─── Step 6: Build anomalies list ───
-    anomalies = []
-    if vocoder_result.get("has_periodic_artifacts"):
-        for freq in vocoder_result.get("artifact_frequencies", [])[:3]:
-            anomalies.append({
-                "label": f"Periodic vocoder artifact at {freq:.0f}Hz",
-                "freq_start": round(freq - 50),
-                "freq_end": round(freq + 50),
-            })
+    # ─── Step 3: AAS & Verdict ───
+    aas_score = _compute_weighted_aas(scores)
+    verdict = "LIKELY AI-GENERATED" if aas_score >= 70 else ("LIKELY REAL" if aas_score < 40 else "UNCERTAIN")
 
-    if breathing_result.get("silence_count", 0) == 0 and duration > 3.0:
-        anomalies.append({
-            "label": "No silence segments in speech > 3s (unnatural)",
-            "freq_start": 0, "freq_end": 0,
-        })
-
-    if phase_result.get("discontinuity_ratio", 0) > 0.25:
-        anomalies.append({
-            "label": f"High phase discontinuity ratio ({phase_result['discontinuity_ratio']:.3f})",
-            "freq_start": 0, "freq_end": 0,
-        })
-
-    # Splicing detection from breathing analysis
-    splicing_detected = (
-        breathing_result.get("silence_count", 0) > 0
-        and breathing_result.get("silence_std_duration", 999) < 0.01
-        and breathing_result.get("silence_count", 0) >= 3
-    )
+    # ─── Step 4: Findings ───
+    findings_list = _generate_findings(scores, details)
 
     elapsed_ms = int((time.time() - start_time) * 1000)
 
@@ -574,20 +487,21 @@ async def detect_audio(file_path: str) -> dict:
         f"AudioDetector DONE: AAS={aas_score:.1f} ({verdict}) "
         f"F0={scores['f0']:.0f} MFCC={scores['mfcc']:.0f} "
         f"Spectral={scores['spectral']:.0f} Breath={scores['breathing']:.0f} "
-        f"Phase={scores['phase']:.0f} HF={scores['hf']:.0f} Groq={scores['groq']:.0f} "
+        f"Phase={scores['phase']:.0f} VTL={scores['vtl']:.0f} Mirror={scores['mirroring']:.0f} "
+        f"HF={scores['hf']:.0f} Groq={scores['groq']:.0f} "
         f"in {elapsed_ms}ms"
     )
-
+    
     return {
         "aas_score": aas_score,
         "verdict": verdict,
         "signature_scores": {k: round(v, 1) for k, v in scores.items()},
         "signature_details": details,
-        "findings": findings,
+        "findings": findings_list,
         "spectrum": spectrum_data,
         "spectrogram_png": spectrogram_png,
-        "anomalies": anomalies,
-        "splicing_detected": splicing_detected,
+        "anomalies": [], # Could be expanded
+        "splicing_detected": breathing_res.get("silence_std_duration", 1) < 0.05,
         "clone_probability": round(aas_score, 1),
         "duration_seconds": round(duration, 2),
         "processing_time_ms": elapsed_ms,

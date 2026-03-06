@@ -158,24 +158,28 @@ class VideoOrchestrator:
                     "engine": "Eye-Blink-EAR",
                     "score": round(blink_score, 1),
                     "detail": blink_result.get("detail", ""),
+                    "reasoning": blink_result.get("reasoning", "")
                 })
             if mesh_score > 0:
                 advanced_findings.append({
                     "engine": "Face-Mesh-Tracking",
                     "score": round(mesh_score, 1),
                     "detail": mesh_result.get("detail", ""),
+                    "reasoning": mesh_result.get("reasoning", "")
                 })
             if reflect_score > 10:
                 advanced_findings.append({
                     "engine": "Eye-Reflection-Geometry",
                     "score": round(reflect_score, 1),
                     "detail": reflect_result.get("detail", ""),
+                    "reasoning": reflect_result.get("reasoning", "Specular highlight geometry analysis to detect inconsistent light-source reflection in eye corneas.")
                 })
             if sync_score > 0:
                 advanced_findings.append({
                     "engine": "Lip-Sync-Correlation",
                     "score": round(sync_score, 1),
                     "detail": sync_result.get("detail", ""),
+                    "reasoning": sync_result.get("reasoning", "")
                 })
 
             ltca_data["advanced_findings"] = advanced_findings

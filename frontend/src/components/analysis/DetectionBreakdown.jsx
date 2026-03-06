@@ -7,8 +7,15 @@ const ENGINE_META = {
     'Spatio-Temporal-Analysis': { label: 'Spatio-Temporal', icon: Scan, desc: 'ViT + Optical Flow' },
     'Latent-Trajectory-Curvature': { label: 'Physics (LTCA)', icon: Activity, desc: 'Latent space physics' },
     'rPPG-Heartbeat': { label: 'Heartbeat (rPPG)', icon: Radio, desc: 'Facial blood-flow pulse' },
-    'Audio-Spoof-Detection': { label: 'Audio Clone', icon: Waves, desc: 'Voice synthesis detection' },
-    // Advanced engines
+    'Audio-Spoof-Detection': { label: 'Audio Clone', icon: Waves, desc: '9-signature voice analysis' },
+    // Audio deep signatures
+    'F0-Stability-Analysis': { label: 'F0 Vocal Stability', icon: Waves, desc: 'Fundamental frequency jitter' },
+    'Vocal-Tract-Consistency': { label: 'Vocal Tract Length', icon: Activity, desc: 'LPC-based VTL physics' },
+    'Spectral-Mirroring-Check': { label: 'Spectral Mirroring', icon: Radio, desc: 'Upsampling aliasing peaks' },
+    'MFCC-Articulatory-Dynamics': { label: 'Articulatory Flow', icon: Waves, desc: 'MFCC delta-delta variance' },
+    'Breathing-Silence-Pattern': { label: 'Biological Pauses', icon: Activity, desc: 'Micro-silence & breath energy' },
+    'Phase-Discontinuity-Detector': { label: 'STFT Phase Flux', icon: Waves, desc: 'Phase jump artifacts' },
+    // Advanced video engines
     'Eye-Blink-EAR': { label: 'Eye Blink Analysis', icon: Eye, desc: 'EAR blink pattern & rate' },
     'Face-Mesh-Tracking': { label: 'Face Mesh Tracking', icon: Brain, desc: 'Landmark jitter & chunk warping' },
     'Eye-Reflection-Geometry': { label: 'Eye Reflection', icon: Zap, desc: 'Specular highlight symmetry' },
@@ -19,7 +26,7 @@ const ENGINE_META = {
 function ScoreBar({ score, color }) {
     return (
         <div className="flex items-center gap-3 mt-2">
-            <div className="flex-1 h-2 bg-ds-silver/10 rounded-full overflow-hidden">
+            <div className="flex-1 h-1.5 bg-ds-silver/10 rounded-full overflow-hidden">
                 <div
                     className="h-full rounded-full transition-all duration-700"
                     style={{ width: `${Math.min(score, 100)}%`, backgroundColor: color }}
@@ -31,9 +38,9 @@ function ScoreBar({ score, color }) {
 }
 
 function scoreColor(s) {
-    if (s >= 70) return '#ff3c00';
-    if (s >= 40) return '#ffd700';
-    return '#39ff14';
+    if (s >= 70) return '#ff3c00'; // Red
+    if (s >= 40) return '#ffaa00'; // Orange
+    return '#00ffaa'; // Cyan-ish Green
 }
 
 export default function DetectionBreakdown({ findings = [], ltcaData = {} }) {
@@ -59,15 +66,16 @@ export default function DetectionBreakdown({ findings = [], ltcaData = {} }) {
     if (entries.length === 0) return null;
 
     return (
-        <BrutalCard>
-            <h3 className="font-grotesk font-bold text-ds-silver text-lg uppercase tracking-wider mb-5 flex items-center gap-2">
+        <BrutalCard className="border-t-4 border-t-ds-cyan">
+            <h3 className="font-grotesk font-black text-ds-silver text-xl uppercase tracking-widest mb-6 flex items-center gap-2">
                 <Scan className="w-5 h-5 text-ds-cyan" />
                 Detection Engine Breakdown
+                <span className="ml-auto text-[10px] font-mono text-ds-silver/30">QUANTUM FORENSICS ACTIVE</span>
             </h3>
 
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 {entries.map(([engineKey, finding]) => {
-                    const meta = ENGINE_META[engineKey] || { label: engineKey, icon: Activity, desc: '' };
+                    const meta = ENGINE_META[engineKey] || { label: engineKey, icon: Activity, desc: 'Forensic analyzer' };
                     const Icon = meta.icon;
                     const s = finding.score ?? 0;
                     const color = scoreColor(s);
@@ -76,32 +84,59 @@ export default function DetectionBreakdown({ findings = [], ltcaData = {} }) {
                     return (
                         <div
                             key={engineKey}
-                            className="p-4 border border-ds-silver/15 bg-ds-bg/60 rounded-sm hover:border-ds-silver/30 transition-colors"
+                            className={`p-4 border-2 border-ds-silver/10 bg-ds-silver/5 rounded-sm hover:border-ds-silver/30 transition-all group`}
                         >
                             <div className="flex items-center gap-2 mb-1">
-                                <Icon className={`w-4 h-4 flex-shrink-0 ${textColor}`} />
-                                <span className="font-grotesk font-bold text-sm text-ds-silver">{meta.label}</span>
-                                <span className={`ml-auto font-mono text-sm font-bold ${textColor}`}>{Math.round(s)}%</span>
+                                <Icon className={`w-4 h-4 flex-shrink-0 ${textColor} group-hover:scale-110 transition-transform`} />
+                                <span className="font-grotesk font-black text-sm text-ds-silver uppercase tracking-tight">{meta.label}</span>
+                                <span className={`ml-auto font-mono text-sm font-black ${textColor}`}>{Math.round(s)}%</span>
                             </div>
-                            <p className="text-ds-silver/40 text-xs font-mono">{meta.desc}</p>
-                            {finding.detail && (
-                                <p className="text-ds-silver/60 text-xs font-mono mt-1 leading-snug line-clamp-2">{finding.detail}</p>
+                            <p className="text-ds-silver/50 text-[10px] uppercase font-mono tracking-tighter">{meta.desc}</p>
+
+                            {finding.reasoning && (
+                                <div className="mt-3 p-2 bg-black/40 border-l-2 border-ds-silver/20 text-[11px] font-mono text-ds-silver/60 leading-relaxed italic">
+                                    {finding.reasoning}
+                                </div>
                             )}
+
                             <ScoreBar score={s} color={color} />
+
+                            {finding.detail && !finding.reasoning && (
+                                <p className="text-ds-silver/40 text-[10px] font-mono mt-2 leading-snug line-clamp-2 italic">
+                                    {finding.detail}
+                                </p>
+                            )}
                         </div>
                     );
                 })}
             </div>
 
-            {/* Lip-Sync detail stats */}
-            {ltcaData.sync_correlation != null && (
-                <div className="mt-4 p-3 border border-ds-silver/10 bg-ds-bg/40 flex flex-wrap gap-4 text-xs font-mono">
-                    <span className="text-ds-silver/50">AV Correlation: <span className="text-ds-cyan">{ltcaData.sync_correlation?.toFixed(2)}</span></span>
+            {/* Supplementary Telemetry */}
+            {(ltcaData.sync_correlation != null || ltcaData.vtl_mean != null) && (
+                <div className="mt-6 p-4 border-2 border-ds-silver/10 bg-black/20 grid grid-cols-2 sm:grid-cols-4 gap-4 text-[10px] font-mono">
+                    {ltcaData.sync_correlation != null && (
+                        <div className="space-y-1">
+                            <p className="text-ds-silver/30 uppercase">AV Correlation</p>
+                            <p className="text-ds-cyan font-bold">{ltcaData.sync_correlation?.toFixed(3)}</p>
+                        </div>
+                    )}
+                    {ltcaData.vtl_mean != null && (
+                        <div className="space-y-1">
+                            <p className="text-ds-silver/30 uppercase">Avg Vocal Tract</p>
+                            <p className="text-ds-cyan font-bold">{ltcaData.vtl_mean?.toFixed(1)} cm</p>
+                        </div>
+                    )}
                     {ltcaData.sync_offset != null && (
-                        <span className="text-ds-silver/50">Frame Offset: <span className="text-ds-cyan">{ltcaData.sync_offset} frames</span></span>
+                        <div className="space-y-1">
+                            <p className="text-ds-silver/30 uppercase">Temporal Drift</p>
+                            <p className="text-ds-cyan font-bold">{ltcaData.sync_offset} frames</p>
+                        </div>
                     )}
                     {ltcaData.blinks_detected != null && (
-                        <span className="text-ds-silver/50">Blinks Detected: <span className="text-ds-cyan">{ltcaData.blinks_detected}</span></span>
+                        <div className="space-y-1">
+                            <p className="text-ds-silver/30 uppercase">Stochastic Blinks</p>
+                            <p className="text-ds-cyan font-bold">{ltcaData.blinks_detected}</p>
+                        </div>
                     )}
                 </div>
             )}

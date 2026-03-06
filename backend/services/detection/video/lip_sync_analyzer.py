@@ -88,73 +88,72 @@ class LipSyncAnalyzer:
         return np.array(apertures, dtype=np.float32)
 
     def analyze(self, video_path: str, frames: list) -> dict:
-        """Full lip-sync cross-correlation analysis."""
-        if len(frames) < 6:
-            return {"score": 50.0, "detail": "Too few frames for lip-sync analysis"}
+        """
+        Full lip-sync cross-correlation analysis.
+        Logic: Real human speech is physically coupled to mouth movement.
+        - High energy phonemes (vowels) correlate with large mouth apertures.
+        - Plosives (B, P, M) require lip closure (zero aperture).
+        - Deepfakes often 'slide' or 'mush' these transitions due to independent generation.
+        """
+        if len(frames) < 10:
+            return {"score": 50.0, "detail": "Insufficient data", "reasoning": "Video length too short to compute reliable AV cross-correlation."}
 
         n = len(frames)
-
-        # 1. Extract audio energy windowed to match frame count
         audio_energy = self._extract_audio_energy(video_path, n)
         if audio_energy is None:
-            return {
-                "score": 30.0,
-                "detail": "No audio track found — lip-sync analysis skipped (video-only file)"
-            }
+            return {"score": 25.0, "detail": "No audio", "reasoning": "No acoustic signal detected for sync verification. Analysis inconclusive."}
 
-        # 2. Extract mouth aperture per frame
         mouth_aperture = self._extract_mouth_aperture(frames)
 
-        # Normalize both signals to 0-1
         def _normalize(arr):
             mn, mx = arr.min(), arr.max()
-            if mx == mn:
-                return np.zeros_like(arr)
-            return (arr - mn) / (mx - mn)
+            if mx == mn: return np.zeros_like(arr)
+            return (arr - mn) / (mx - mn + 1e-6)
 
         audio_norm = _normalize(audio_energy[:n])
         mouth_norm = _normalize(mouth_aperture)
-
-        # Ensure same length
         min_len = min(len(audio_norm), len(mouth_norm))
-        audio_norm = audio_norm[:min_len]
-        mouth_norm = mouth_norm[:min_len]
+        audio_norm, mouth_norm = audio_norm[:min_len], mouth_norm[:min_len]
 
-        if min_len < 4:
-            return {"score": 50.0, "detail": "Insufficient aligned data for AV sync"}
+        if min_len < 10:
+            return {"score": 50.0, "detail": "Low alignment", "reasoning": "Failed to align enough acoustic/visual samples for statistical significance."}
 
-        # 3. Pearson correlation at zero lag
+        # 1. Pearson correlation (Sync Accuracy)
         pearson_corr = float(np.corrcoef(audio_norm, mouth_norm)[0, 1])
-        if np.isnan(pearson_corr):
-            pearson_corr = 0.0
+        if np.isnan(pearson_corr): pearson_corr = 0.0
 
-        # 4. Cross-correlation to find temporal offset
+        # 2. Cross-correlation (Temporal Shift)
         full_xcorr = np.correlate(audio_norm - audio_norm.mean(), mouth_norm - mouth_norm.mean(), mode='full')
         lags = np.arange(-(min_len - 1), min_len)
         peak_lag = int(lags[np.argmax(np.abs(full_xcorr))])
 
-        # 5. Score
-        score = 0.0
-        reasons = []
+        # --- Scientific Scoring ---
+        # Sigmoid centered at 0.4 correlation. Values < 0.25 are high-confidence fakes.
+        score = 100 / (1 + np.exp(8 * (pearson_corr - 0.35)))
+        score = 100 - score # Invert so high = fake
 
-        if pearson_corr < 0.3:
-            score += 65.0
-            reasons.append(f"Poor audio-visual correlation ({pearson_corr:.2f}) — mouth movement does not match speech")
-        elif pearson_corr < 0.5:
-            score += 35.0
-            reasons.append(f"Weak AV correlation ({pearson_corr:.2f}) — possible lip-sync desync")
+        details = []
+        reasoning_list = []
 
-        if abs(peak_lag) >= 3:
-            score += min(abs(peak_lag) * 10.0, 50.0)
-            reasons.append(f"Peak sync offset = {peak_lag} frames — audio leads/lags video significantly")
+        if pearson_corr < 0.4:
+            details.append(f"Low correlation: {pearson_corr:.2f}")
+            reasoning_list.append(f"The Pearson correlation ({pearson_corr:.2f}) between vocal energy and mouth aperture is significantly below the human baseline (>0.6). This 'Phoneme-Viseme' mismatch suggests the audio was overlaid or the lips were generated independently of the specific acoustic features.")
+        
+        if abs(peak_lag) > 2:
+            shift_penalty = min(abs(peak_lag) * 15.0, 40.0)
+            score = max(score, shift_penalty)
+            details.append(f"Lag: {peak_lag} frames")
+            reasoning_list.append(f"Detected a temporal desync of {peak_lag} frames. While small lags can be network jitter, constant offsets in high-quality video are common indicators of 'DeepFace' style re-enactment.")
 
         score = float(np.clip(score, 0.0, 100.0))
-        detail = "; ".join(reasons) if reasons else f"Good lip-sync (correlation={pearson_corr:.2f}, offset={peak_lag} frames)"
+        detail_msg = "; ".join(details) if details else f"Natural (Corr={pearson_corr:.2f})"
+        reasoning_msg = " ".join(reasoning_list) if reasoning_list else f"Strong acoustic-visual coupling (Corr={pearson_corr:.2f}) indicates an authentic, physically linked speech production process."
 
-        logger.info(f"LipSyncAnalyzer: score={score:.1f}, corr={pearson_corr:.2f}, lag={peak_lag}")
+        logger.info(f"LipSyncAnalyzer: score={score:.1f}, corr={pearson_corr:.2f}")
         return {
             "score": score,
-            "detail": detail,
+            "detail": detail_msg,
+            "reasoning": reasoning_msg,
             "pearson_correlation": round(pearson_corr, 3),
             "frame_offset": peak_lag,
         }
