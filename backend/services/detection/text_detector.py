@@ -13,7 +13,7 @@ class TextDetector:
         self.classifier = None
         if HAS_TRANSFORMERS:
             try:
-                self.classifier = hf_pipeline("text-classification", model="distilbert-base-uncased-finetuned-sst-2-english", return_all_scores=True)
+                self.classifier = hf_pipeline("text-classification", model="distilbert-base-uncased-finetuned-sst-2-english", top_k=None)
             except Exception:
                 self.classifier = None
 

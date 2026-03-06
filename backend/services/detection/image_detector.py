@@ -27,7 +27,7 @@ class ImageDetector:
         if HAS_TORCH:
             try:
                 self.device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-                base = models.efficientnet_b4(pretrained=False)
+                base = models.efficientnet_b4(weights=None)
                 base.classifier[1] = nn.Linear(base.classifier[1].in_features, 1)
                 self.model = base.to(self.device).eval()
                 self.transform = transforms.Compose([
