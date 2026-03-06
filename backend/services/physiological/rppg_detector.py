@@ -6,6 +6,10 @@ try:
     HAS_CV2 = True
 except ImportError:
     HAS_CV2 = False
+    # Provide a dummy np so type hints (np.ndarray) don't crash at class definition
+    import types
+    np = types.SimpleNamespace(ndarray=object, array=lambda *a, **k: [], mean=lambda *a: 0, std=lambda *a: 0, linspace=lambda *a, **k: [], any=lambda *a: False, abs=lambda *a: [], argmax=lambda *a: 0)
+    np.fft = types.SimpleNamespace(rfft=lambda *a: [], rfftfreq=lambda *a, **k: [])
     logger.warning("cv2/numpy not installed — RPPGDetector will return heuristic scores")
 
 from backend.services.physiological.face_roi_extractor import FaceROIExtractor
