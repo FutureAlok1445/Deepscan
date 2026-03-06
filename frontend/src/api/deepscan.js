@@ -191,6 +191,10 @@ function normalizeResult(data) {
       value: p.value ?? p.amplitude ?? p.v ?? 0,
     }));
   }
+  // Map elapsed_seconds → processing_time_ms if missing
+  if (!data.processing_time_ms && data.elapsed_seconds) {
+    data.processing_time_ms = Math.round(data.elapsed_seconds * 1000);
+  }
   return data;
 }
 
