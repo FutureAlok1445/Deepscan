@@ -403,6 +403,12 @@ function App() {
                         : result.explainability.text.split('\n').map((line, i) => <p key={i}>{line}</p>)
                       }
                     </div>
+                    {arbitrationResult?.exifDetails && (
+                      <div style={{ marginTop: '16px', padding: '12px', background: 'rgba(59,130,246,0.1)', border: '1px solid rgba(59,130,246,0.5)', borderRadius: '6px' }}>
+                        <strong style={{ color: '#60a5fa', display: 'block', marginBottom: '4px' }}>Hardware Metadata (EXIF):</strong>
+                        <span style={{ fontSize: '0.9rem', color: '#cbd5e1' }}>{arbitrationResult.exifDetails}</span>
+                      </div>
+                    )}
                   </div>
 
                   <div className="card heatmaps">

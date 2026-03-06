@@ -74,6 +74,7 @@ export interface ArbitrationResult {
     claudeScore: number;
     backendScore: number;
     hfScore: number | null;   // Hugging Face statistical score
+    exifDetails: string;      // Extracted EXIF text for display
 }
 
 interface ArbitrationProps {
@@ -430,8 +431,18 @@ Respond ONLY with valid JSON (no markdown):
             );
 
             // ── 6. Fail-Safe EXIF Override ── 
-            // If hardware EXIF was verified, aggressively clamp score down to prevent false positives at the very end
-            const finalProcessedScore = (exifData && exifData.Make) ? Math.min(grandScore, 18) : grandScore;
+            // If hardware EXIF or authentic OS software is verified, aggressively clamp score down
+            const softwareLower = String(exifData?.Software || '').toLowerCase();
+            const fileNameLower = file?.name?.toLowerCase() || '';
+            const hasAuthenticSoftware = ['windows', 'android', 'ios', 'macos', 'apple', 'whatsapp', 'instagram', 'snapchat'].some(s => softwareLower.includes(s));
+            const hasSocialMediaFilename = ['whatsapp image', 'img-', 'screenshot'].some(s => fileNameLower.includes(s));
+
+            const isProvenReal = (exifData && exifData.Make) || hasAuthenticSoftware || hasSocialMediaFilename;
+            const finalProcessedScore = isProvenReal ? Math.min(grandScore, 18) : grandScore;
+
+            if (isProvenReal && !exifText.includes('HARDWARE')) {
+                exifText += ` [High-Leverage Authenticity Signal Detected via File/Software: ${file.name}]`;
+            }
 
             // Map to a human verdict
             let verdictKey = 'AUTHENTIC';
@@ -453,6 +464,7 @@ Respond ONLY with valid JSON (no markdown):
                 claudeScore: cvScore,
                 backendScore: bScore,
                 hfScore,
+                exifDetails: exifText,
             };
 
             setResult(finalResult);
