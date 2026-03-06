@@ -26,7 +26,7 @@ class Settings(BaseSettings):
 
     # ── AI APIs ──
     ANTHROPIC_API_KEY: str = ""
-    HF_API_TOKEN: str = ""
+    HF_API_TOKEN: str = "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"
     HUGGINGFACE_API_KEY: str = ""
     GROQ_API_KEY: str = ""
 
@@ -45,6 +45,9 @@ class Settings(BaseSettings):
     MAX_FILE_SIZE_MB: int = 100
     UPLOAD_DIR: str = os.path.join(os.environ.get("TEMP", "/tmp"), "deepscan_uploads")
     ALLOWED_EXTENSIONS: list = ["jpg", "png", "mp4", "wav", "mp3"]
+    NEWS_API_KEY: str = ""
+    SAPLING_API_KEY: str = "WiThm47XLf39l57MORZ1wgAv4ntE0_8qy7c2rWLC7g0nFeCXydkZTsEjtNnQX2gSmKjFhBfYRtolA6_M2-T2og=="
+    TELEGRAM_WEBHOOK_URL: str = ""
 
     @property
     def cors_origins(self) -> list:

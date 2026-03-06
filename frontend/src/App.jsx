@@ -62,17 +62,15 @@ export default function App() {
       }} />
       <Navbar transparent={isHome} />
       <main style={{ paddingTop: isHome ? 0 : 64 }}>
-        <Suspense fallback={<PageLoader />}>
-          <Routes>
-            <Route path="/" element={<Home />} />
-            <Route path="/analyze" element={<Analyze />} />
-            <Route path="/result/:id" element={<Result />} />
-            <Route path="/history" element={<History />} />
-            <Route path="/learn" element={<Learn />} />
-            <Route path="/community" element={<Community />} />
-            <Route path="/text-scan" element={<TextScan />} />
-          </Routes>
-        </Suspense>
+        <Routes>
+          <Route path="/" element={<Home />} />
+          <Route path="/analyze" element={<Analyze />} />
+          <Route path="/result/:id" element={<Result />} />
+          <Route path="/history" element={<History />} />
+          <Route path="/learn" element={<Learn />} />
+          <Route path="/community" element={<Community />} />
+          <Route path="/analyze/text" element={<TextAnalyze />} />
+        </Routes>
       </main>
       <Footer />
     </div>

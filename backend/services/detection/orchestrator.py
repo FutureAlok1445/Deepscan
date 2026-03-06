@@ -59,6 +59,8 @@ class DetectionOrchestrator:
             self.video_detector = VideoOrchestrator()
             self.audio_detector = AudioDetector()
             self.text_detector = TextDetector()
+            # Pre-load in background disabled to prevent startup timeouts in restricted network
+            # asyncio.create_task(asyncio.to_thread(self.text_detector.pre_load))
             self.rppg_detector = RPPGDetector()
             self.fft_analyzer = FFTAnalyzer()
             self.noise_analyzer = NoiseAnalyzer()
