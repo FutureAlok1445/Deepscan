@@ -17,6 +17,8 @@ class Settings(BaseSettings):
     ALLOWED_EXTENSIONS: list = ["jpg", "png", "mp4", "wav", "mp3"]
     NEWS_API_KEY: str = ""
     TELEGRAM_WEBHOOK_URL: str = ""
+    HF_API_TOKEN: str = ""
+    GROQ_API_KEY: str = ""
 
     model_config = SettingsConfigDict(
         env_file=".env",

@@ -20,6 +20,8 @@ import HeartbeatChart from '../components/analysis/HeartbeatChart';
 import GradCamOverlay from '../components/analysis/GradCamOverlay';
 import AudioSpectrum from '../components/analysis/AudioSpectrum';
 import TrajectoryPlot from '../components/analysis/TrajectoryPlot';
+import GrokNLMAnalysis from '../components/analysis/GrokNLMAnalysis';
+import DetectionBreakdown from '../components/analysis/DetectionBreakdown';
 import ShareVerdict from '../components/accessibility/ShareVerdict';
 import DownloadReport from '../components/accessibility/DownloadReport';
 
@@ -89,7 +91,7 @@ export default function Result() {
   const score = result.score ?? result.aacs_score ?? 0;
 
   return (
-    <div ref={resultRef} className="min-h-screen bg-ds-bg pt-24 pb-16 px-4 sm:px-6 lg:px-8">
+    <div ref={resultRef} className="relative min-h-screen bg-ds-bg pt-24 pb-16 px-4 sm:px-6 lg:px-8">
       <div className="max-w-6xl mx-auto space-y-8">
         {/* Back link */}
         <Link
@@ -161,6 +163,16 @@ export default function Result() {
           <div className="result-section"><KeyFindings findings={result.findings} /></div>
         )}
 
+        {/* Detection Engine Breakdown — all 9 engines with score bars */}
+        {(result.findings?.length > 0 || result.ltca_data) && (
+          <div className="result-section">
+            <DetectionBreakdown
+              findings={result.findings || []}
+              ltcaData={result.ltca_data || {}}
+            />
+          </div>
+        )}
+
         {/* Sub-Scores */}
         {result.sub_scores && (
           <div className="result-section"><SubScoreGrid subScores={result.sub_scores} /></div>
@@ -199,19 +211,13 @@ export default function Result() {
           </div>
         )}
 
-        {/* Deep NLM Forensic Analysis */}
-        {result.ltca_data && result.ltca_data.nlm_report && (
+        {/* Deep NLM Forensic Analysis — powered by Grok 4.1 via Puter.js */}
+        {result.ltca_data && (
           <div className="result-section">
-            <BrutalCard className="p-6 bg-ds-silver/5 border-l-8 border-l-ds-cyan">
-              <h3 className="font-grotesk font-black text-ds-silver text-xl uppercase tracking-widest mb-4 flex items-center gap-2">
-                <span className="text-ds-cyan">[NLM]</span> Deep Expert Analysis
-              </h3>
-              <div className="font-mono text-sm text-ds-silver/80 leading-relaxed space-y-4">
-                {result.ltca_data.nlm_report.split('\n\n').map((paragraph, i) => (
-                  <p key={i}>{paragraph}</p>
-                ))}
-              </div>
-            </BrutalCard>
+            <GrokNLMAnalysis
+              ltcaData={result.ltca_data}
+              masScore={result.sub_scores?.mas ?? score}
+            />
           </div>
         )}
 

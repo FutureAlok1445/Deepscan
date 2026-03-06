@@ -1,7 +1,7 @@
 import React, { useState, useLayoutEffect, useRef } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
-  AlertTriangle, ThumbsUp, ThumbsDown, MessageSquare, TrendingUp, Users, Shield,
+  AlertTriangle, ThumbsUp, ThumbsDown, MessageSquare,
   ExternalLink, Send,
 } from 'lucide-react';
 import gsap from 'gsap';
@@ -12,13 +12,8 @@ import BrutalCard from '../components/ui/BrutalCard';
 import BrutalBadge from '../components/ui/BrutalBadge';
 import BrutalButton from '../components/ui/BrutalButton';
 
-/* ─── Fake community stats for demo ─── */
-const COMMUNITY_STATS = [
-  { icon: Shield, label: 'Total Scans', value: '12,847', color: 'text-ds-red' },
-  { icon: AlertTriangle, label: 'Fakes Caught', value: '3,291', color: 'text-ds-yellow' },
-  { icon: Users, label: 'Active Users', value: '2,104', color: 'text-ds-cyan' },
-  { icon: TrendingUp, label: 'This Week', value: '+342', color: 'text-ds-green' },
-];
+
+
 
 export default function Community() {
   const queryClient = useQueryClient();
@@ -66,17 +61,6 @@ export default function Community() {
           </p>
         </div>
 
-        {/* Stats */}
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-          {COMMUNITY_STATS.map(({ icon: Icon, label, value, color }, i) => (
-            <BrutalCard key={i} hover={false} className="!p-4 text-center comm-stat">
-              <Icon className={`w-6 h-6 mx-auto mb-2 ${color}`} />
-              <p className={`text-xl font-grotesk font-black ${color}`}>{value}</p>
-              <p className="text-xs font-mono text-ds-silver/40 mt-1">{label}</p>
-            </BrutalCard>
-          ))}
-        </div>
-
         {/* Alert Feed */}
         <div className="space-y-4">
           <h2 className="font-grotesk font-bold text-lg text-ds-silver uppercase tracking-wider flex items-center gap-2">
@@ -100,10 +84,10 @@ export default function Community() {
           ) : (
             alerts.map((alert) => (
               <div key={alert.id} className="comm-alert">
-              <AlertCard
-                alert={alert}
-                onVote={(vote) => feedbackMutation.mutate({ alertId: alert.id, vote })}
-              />
+                <AlertCard
+                  alert={alert}
+                  onVote={(vote) => feedbackMutation.mutate({ alertId: alert.id, vote })}
+                />
               </div>
             ))
           )}
