@@ -11,7 +11,7 @@ export default function BrutalCard({
   return (
     <Tag
       className={`
-        bg-ds-card border-3 border-ds-silver/30 p-6
+        bg-ds-card border-3 border-ds-silver/30 p-4 sm:p-6
         brutal-shadow
         ${hover ? 'transition-transform duration-200 hover:-translate-y-1 hover:shadow-brutal-lg' : ''}
         ${glow ? 'shadow-brutal-glow' : ''}

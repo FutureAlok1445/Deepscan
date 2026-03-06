@@ -1,10 +1,12 @@
 import React, { useState, useEffect } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import { Menu, X, Shield, Scan } from 'lucide-react';
+import useBackendStatus from '../../hooks/useBackendStatus';
 
 const NAV_LINKS = [
   { to: '/', label: 'Home' },
   { to: '/analyze', label: 'Analyze' },
+  { to: '/analyze/text', label: 'Text Scan' },
   { to: '/history', label: 'History' },
   { to: '/learn', label: 'Learn' },
   { to: '/community', label: 'Community' },
@@ -14,6 +16,7 @@ export default function Navbar({ transparent = false }) {
   const [open, setOpen] = useState(false);
   const [scrolled, setScrolled] = useState(false);
   const location = useLocation();
+  const { isOnline } = useBackendStatus(15000);
 
   useEffect(() => {
     const onScroll = () => setScrolled(window.scrollY > 40);
@@ -27,11 +30,10 @@ export default function Navbar({ transparent = false }) {
 
   return (
     <nav
-      className={`fixed top-0 left-0 right-0 z-50 transition-all duration-300 ${
-        showSolid
+      className={`fixed top-0 left-0 right-0 z-50 transition-all duration-300 ${showSolid
           ? 'bg-ds-bg/95 backdrop-blur-md border-b-3 border-ds-silver/20'
           : 'bg-transparent border-b border-transparent'
-      }`}
+        }`}
     >
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="flex items-center justify-between h-16">
@@ -47,6 +49,13 @@ export default function Navbar({ transparent = false }) {
               <span className="text-ds-silver">SCAN</span>
               <span className="text-ds-red">]</span>
             </span>
+            {/* Backend status dot */}
+            <span
+              title={isOnline === null ? 'Checking backend...' : isOnline ? 'Backend online' : 'Backend offline'}
+              className={`ml-2 inline-block w-2 h-2 rounded-full transition-colors ${
+                isOnline === null ? 'bg-yellow-400 animate-pulse' : isOnline ? 'bg-green-400' : 'bg-red-500 animate-pulse'
+              }`}
+            />
           </Link>
 
           {/* Desktop Links */}
@@ -55,11 +64,10 @@ export default function Navbar({ transparent = false }) {
               <Link
                 key={to}
                 to={to}
-                className={`px-3 py-2 text-sm font-mono uppercase tracking-wider transition-colors ${
-                  location.pathname === to
+                className={`px-3 py-2 text-sm font-mono uppercase tracking-wider transition-colors ${location.pathname === to
                     ? 'text-ds-red border-b-2 border-ds-red'
                     : 'text-ds-silver/70 hover:text-ds-silver'
-                }`}
+                  }`}
               >
                 {label}
               </Link>
@@ -91,9 +99,8 @@ export default function Navbar({ transparent = false }) {
               <Link
                 key={to}
                 to={to}
-                className={`block px-3 py-3 font-mono uppercase tracking-wider text-sm border-b border-ds-silver/20 ${
-                  location.pathname === to ? 'text-ds-red' : 'text-ds-silver/70'
-                }`}
+                className={`block px-3 py-3 font-mono uppercase tracking-wider text-sm border-b border-ds-silver/20 ${location.pathname === to ? 'text-ds-red' : 'text-ds-silver/70'
+                  }`}
               >
                 {label}
               </Link>

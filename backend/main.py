@@ -1,4 +1,5 @@
 import contextlib
+import asyncio
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
@@ -13,7 +14,7 @@ except ImportError:
 
 from backend.config import settings
 from backend.api.v1.endpoints import (
-    analyze, analyze_url, analyze_image, live_scan, history, report, community, webhook
+    analyze, analyze_url, analyze_image, analyze_text, live_scan, history, report, community, webhook, feedback
 )
 from backend.services.detection.orchestrator import orchestrator
 from backend.services.IMageDetector.orchestrator import image_orchestrator
@@ -46,10 +47,11 @@ app = FastAPI(
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=settings.cors_origins,
     allow_credentials=True,
-    allow_methods=["*"],
+    allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
     allow_headers=["*"],
+    expose_headers=["Content-Disposition"],
 )
 
 # Register SlowAPI rate limiter
@@ -73,11 +75,13 @@ async def global_exception_handler(request: Request, exc: Exception):
 
 app.include_router(analyze.router, prefix="/api/v1/analyze", tags=["Analyze"])
 app.include_router(analyze_url.router, prefix="/api/v1/analyze", tags=["Analyze URL"])
-app.include_router(analyze_image.router, prefix="/api/v1/analyze", tags=["Analyze Image"])
+app.include_router(analyze_text.router, prefix="/api/v1/analyze/text", tags=["Analyze Text"])
 app.include_router(live_scan.router, prefix="/ws", tags=["Live Scan"])
 app.include_router(history.router, prefix="/api/v1/history", tags=["History"])
 app.include_router(report.router, prefix="/api/v1/report", tags=["Report"])
 app.include_router(community.router, prefix="/api/v1/community", tags=["Community"])
+app.include_router(feedback.router, prefix="/api/v1/feedback", tags=["Feedback"])
+app.include_router(analyze_text.router, prefix="/api/v1/analyze/text", tags=["Text Analysis"])
 app.include_router(webhook.router, prefix="/webhook", tags=["Webhook"])
 
 @app.get("/health", tags=["Health"])

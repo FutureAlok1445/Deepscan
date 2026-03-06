@@ -20,7 +20,7 @@ export default function useAnalysis() {
   const [progress, setProgress] = useState(0);
   const [currentStep, setCurrentStep] = useState('');
 
-  const analyze = useCallback((file) => {
+  const analyze = useCallback((file, language = 'en') => {
     setStatus('uploading');
     setError(null);
     setResult(null);
@@ -56,7 +56,7 @@ export default function useAnalysis() {
       }
     };
 
-    const promise = analyzeFile(file, onUploadProgress);
+    const promise = analyzeFile(file, onUploadProgress, language);
 
     promise
       .then((data) => {
@@ -78,7 +78,7 @@ export default function useAnalysis() {
     return promise;
   }, []);
 
-  const analyzeByUrl = useCallback((url) => {
+  const analyzeByUrl = useCallback((url, language = 'en') => {
     setStatus('analyzing');
     setError(null);
     setResult(null);
@@ -96,7 +96,7 @@ export default function useAnalysis() {
       }
     }, 600);
 
-    const promise = analyzeUrl(url);
+    const promise = analyzeUrl(url, language);
     promise
       .then((data) => { clearInterval(interval); setProgress(100); setCurrentStep('Analysis complete!'); setResult(data); setStatus('complete'); })
       .catch((err) => { clearInterval(interval); setError(err?.message || 'Analysis failed.'); setStatus('error'); });

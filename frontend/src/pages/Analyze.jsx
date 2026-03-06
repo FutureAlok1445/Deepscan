@@ -120,7 +120,7 @@ export default function Analyze() {
             <button
               key={id}
               onClick={() => { setActiveTab(id); reset(); }}
-              className={`flex items-center gap-2 px-6 py-3 font-mono text-sm uppercase tracking-wider transition-all duration-300 ${
+              className={`flex items-center gap-1.5 sm:gap-2 px-3 sm:px-6 py-2.5 sm:py-3 font-mono text-xs sm:text-sm uppercase tracking-wider transition-all duration-300 ${
                 activeTab === id
                   ? 'text-ds-red border-b-3 border-ds-red bg-ds-red/5 shadow-[0_4px_20px_rgba(255,60,0,0.15)]'
                   : 'text-ds-silver/50 hover:text-ds-silver hover:bg-ds-silver/5'
@@ -137,7 +137,7 @@ export default function Analyze() {
           <div className="space-y-4 analyze-content">
             <div
               {...getRootProps()}
-              className={`border-3 border-dashed p-12 text-center cursor-pointer transition-all duration-300 group relative overflow-hidden ${
+              className={`border-3 border-dashed p-6 sm:p-12 text-center cursor-pointer transition-all duration-300 group relative overflow-hidden ${
                 isDragActive
                   ? 'border-ds-red bg-ds-red/10 shadow-[0_0_40px_rgba(255,60,0,0.2)]'
                   : 'border-ds-silver/30 hover:border-ds-cyan/60 hover:shadow-[0_0_30px_rgba(0,245,255,0.1)]'

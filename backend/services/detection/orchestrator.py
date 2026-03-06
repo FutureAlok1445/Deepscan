@@ -59,6 +59,8 @@ class DetectionOrchestrator:
             self.video_detector = VideoOrchestrator()
             self.audio_detector = AudioDetector()
             self.text_detector = TextDetector()
+            # Pre-load in background disabled to prevent startup timeouts in restricted network
+            # asyncio.create_task(asyncio.to_thread(self.text_detector.pre_load))
             self.rppg_detector = RPPGDetector()
             self.fft_analyzer = FFTAnalyzer()
             self.noise_analyzer = NoiseAnalyzer()
@@ -121,9 +123,15 @@ class DetectionOrchestrator:
                 self._last_ltca_data = ltca_data
 
             elif category == "audio":
-                score = await self.audio_detector.analyze(file_path)
+                # For audio, MAS uses the same 7-sig detector as AAS.
+                # We run analyze_full() here so MAS gets a real score.
+                # AAS will also run independently — both contribute to final score.
+                full_result = await self.audio_detector.analyze_full(file_path)
+                score = full_result["score"]
                 findings.append({"engine": "Audio-Spoof-Detection", "score": round(score, 1),
-                                 "detail": "AI Voice Clone / Synthetic Speech analysis"})
+                                 "detail": f"AI Voice Clone / Synthetic Speech analysis — {full_result.get('verdict', 'UNCERTAIN')}"})
+                # Cache full result so AAS can reuse it (avoid double computation)
+                self._cached_audio_result = full_result
             else:
                 score = 50.0
                 ltca_data = {}
@@ -189,7 +197,13 @@ class DetectionOrchestrator:
         if category not in ("audio", "video"):
             return 0.0, [{"engine": "AudioAnalysis", "score": 0.0, "detail": "Skipped — no audio track"}]
         try:
-            full_result = await self.audio_detector.analyze_full(file_path)
+            # Reuse cached result from MAS if available (avoids running 7-sig twice)
+            cached = getattr(self, "_cached_audio_result", None)
+            if cached and category == "audio":
+                full_result = cached
+                self._cached_audio_result = None  # clear after use
+            else:
+                full_result = await self.audio_detector.analyze_full(file_path)
             score = full_result["score"]
 
             # Build the primary finding with all data the frontend needs
@@ -214,9 +228,6 @@ class DetectionOrchestrator:
                     "detail": f_text,
                 })
 
-            score = await self.audio_detector.analyze(file_path)
-            findings.append({"engine": "AI-Audio-Scanner", "score": round(score, 1),
-                             "detail": "Transformer-based voice cloning analysis"})
             return round(score, 2), findings
         except Exception as e:
             logger.warning(f"AAS computation error: {e}")
@@ -298,14 +309,27 @@ class DetectionOrchestrator:
         # Run sub-scores concurrently
         ltca_data_payload = {}
         try:
-            # We run MAS (detector) and other sub-scores
-            (mas, mas_f, ltca_data_payload), (pps, pps_f), (irs, irs_f), (aas, aas_f), (cvs, cvs_f) = await asyncio.gather(
-                self._compute_mas(file_path, category),
-                self._compute_pps(file_path, category),
-                self._compute_irs(file_path, category),
-                self._compute_aas(file_path, category),
-                self._compute_cvs(file_path, category),
-            )
+            if category == "audio":
+                # For audio: MAS and AAS both use the 7-sig audio detector.
+                # Run MAS first (it caches audio result), then AAS reuses it.
+                # Other engines run in parallel with MAS.
+                (mas, mas_f, ltca_data_payload), (pps, pps_f), (irs, irs_f), (cvs, cvs_f) = await asyncio.gather(
+                    self._compute_mas(file_path, category),
+                    self._compute_pps(file_path, category),
+                    self._compute_irs(file_path, category),
+                    self._compute_cvs(file_path, category),
+                )
+                # Now AAS picks up the cached result from MAS (no double computation)
+                aas, aas_f = await self._compute_aas(file_path, category)
+            else:
+                # Non-audio: run all 5 in parallel
+                (mas, mas_f, ltca_data_payload), (pps, pps_f), (irs, irs_f), (aas, aas_f), (cvs, cvs_f) = await asyncio.gather(
+                    self._compute_mas(file_path, category),
+                    self._compute_pps(file_path, category),
+                    self._compute_irs(file_path, category),
+                    self._compute_aas(file_path, category),
+                    self._compute_cvs(file_path, category),
+                )
             # EXTRA: Semantic Fact-Checking (Vision LLM + Fact Check API)
             if category == "video" and ltca_data_payload.get("frames"):
                 frames = ltca_data_payload.get("frames")
@@ -337,7 +361,7 @@ class DetectionOrchestrator:
 
         # ---------- CDCF Fusion ----------
         scores_dict = {"mas": mas, "pps": pps, "irs": irs, "aas": aas, "cvs": cvs}
-        fusion = self.cdcf_engine.fuse(scores_dict)
+        fusion = self.cdcf_engine.fuse(scores_dict, category=category)
         aacs_score = fusion["aacs"]
         verdict = fusion["verdict"]
 

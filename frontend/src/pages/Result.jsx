@@ -106,7 +106,7 @@ export default function Result() {
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 result-section">
           {/* Score Gauge */}
           <BrutalCard className="flex flex-col items-center justify-center lg:col-span-1 score-display">
-            <TrustScoreGauge score={score} size={220} />
+            <TrustScoreGauge score={score} size={typeof window !== 'undefined' && window.innerWidth < 640 ? 160 : 220} />
             <div className="mt-4 text-center">
               <BrutalBadge
                 variant={score >= 70 ? 'red' : score >= 40 ? 'yellow' : 'green'}
@@ -121,7 +121,7 @@ export default function Result() {
           <BrutalCard className="lg:col-span-2 space-y-4">
             <div className="flex items-start justify-between flex-wrap gap-2">
               <div>
-                <h1 className="font-grotesk font-black text-2xl text-ds-silver">
+                <h1 className="font-grotesk font-black text-xl sm:text-2xl text-ds-silver">
                   Analysis Result
                 </h1>
                 <p className="text-xs font-mono text-ds-silver/40 mt-1">
@@ -151,10 +151,10 @@ export default function Result() {
 
             {/* Quick score */}
             <div className="flex items-center gap-4">
-              <span className={`text-5xl font-grotesk font-black ${getScoreColor(score)}`}>
+              <span className={`text-3xl sm:text-5xl font-grotesk font-black ${getScoreColor(score)}`}>
                 {formatScore(score)}
               </span>
-              <span className="text-sm font-mono text-ds-silver/40">AACS Score</span>
+              <span className="text-xs sm:text-sm font-mono text-ds-silver/40">AACS Score</span>
             </div>
           </BrutalCard>
         </div>
@@ -222,8 +222,8 @@ export default function Result() {
         {/* Deep NLM Forensic Analysis */}
         {result.ltca_data && result.ltca_data.nlm_report && (
           <div className="result-section">
-            <BrutalCard className="p-6 bg-ds-silver/5 border-l-8 border-l-ds-cyan">
-              <h3 className="font-grotesk font-black text-ds-silver text-xl uppercase tracking-widest mb-4 flex items-center gap-2">
+            <BrutalCard className="!p-3 sm:!p-6 bg-ds-silver/5 border-l-4 sm:border-l-8 border-l-ds-cyan">
+              <h3 className="font-grotesk font-black text-ds-silver text-base sm:text-xl uppercase tracking-wider sm:tracking-widest mb-3 sm:mb-4 flex items-center gap-2">
                 <span className="text-ds-cyan">[NLM]</span> Deep Expert Analysis
               </h3>
               <div className="font-mono text-sm text-ds-silver/80 leading-relaxed space-y-4">

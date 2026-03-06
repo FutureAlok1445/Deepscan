@@ -129,8 +129,8 @@ export default function Home() {
               <div className="text-center py-10 px-6 border-3 border-ds-silver/20 bg-ds-card relative overflow-hidden brutal-shadow card-hover-lift">
                 <div className="absolute inset-0 bg-gradient-to-br from-transparent via-transparent to-ds-red/5" />
                 <div className="absolute top-0 left-0 w-full h-1" style={{ background: item.color }} />
-                <p className="text-5xl font-grotesk font-black relative z-10" style={{ color: item.color }}>{item.stat}</p>
-                <p className="mt-3 text-sm font-mono text-ds-silver relative z-10 font-bold">{item.desc}</p>
+                <p className="text-3xl sm:text-5xl font-grotesk font-black relative z-10" style={{ color: item.color }}>{item.stat}</p>
+                <p className="mt-2 sm:mt-3 text-xs sm:text-sm font-mono text-ds-silver relative z-10 font-bold">{item.desc}</p>
               </div>
             </div>
           ))}
@@ -151,13 +151,13 @@ export default function Home() {
           {PIPELINE_STEPS.map((step, i) => (
             <div key={i} className="">
               <div
-                className="flex items-start gap-6 p-6 border-3 border-ds-silver/40 bg-ds-card hover:border-ds-silver/70 transition-all group relative overflow-hidden card-hover-lift"
+                className="flex items-start gap-3 sm:gap-6 p-3 sm:p-6 border-3 border-ds-silver/40 bg-ds-card hover:border-ds-silver/70 transition-all group relative overflow-hidden card-hover-lift"
                 style={{ borderLeftColor: step.color, borderLeftWidth: 4 }}
               >
                 <div className="absolute inset-0 opacity-0 group-hover:opacity-100 transition-opacity duration-500"
                   style={{ background: `linear-gradient(90deg, ${step.color}10, transparent)` }} />
-                <div className="flex-shrink-0 relative z-10 flex items-center justify-center w-14 h-14 border-3 border-ds-silver/30" style={{ color: step.color }}>
-                  <step.icon className="w-7 h-7" />
+                <div className="flex-shrink-0 relative z-10 flex items-center justify-center w-10 h-10 sm:w-14 sm:h-14 border-3 border-ds-silver/30" style={{ color: step.color }}>
+                  <step.icon className="w-5 h-5 sm:w-7 sm:h-7" />
                 </div>
                 <div className="relative z-10 flex-1">
                   <div className="flex items-center gap-3">
@@ -191,9 +191,9 @@ export default function Home() {
           </p>
         </div>
         <div className="gs-formula-container">
-          <div className="text-center mb-10 p-6 border-3 border-ds-green/30 bg-ds-card relative overflow-hidden">
+          <div className="text-center mb-10 p-3 sm:p-6 border-3 border-ds-green/30 bg-ds-card relative overflow-hidden">
             <div className="absolute inset-0 cyber-grid opacity-30" />
-            <p className="font-mono text-lg md:text-xl text-ds-silver relative z-10">
+            <p className="font-mono text-xs sm:text-lg md:text-xl text-ds-silver relative z-10 leading-relaxed">
               AACS = (<span className="text-ds-red font-bold">0.30</span>×MAS + <span className="text-ds-green font-bold">0.25</span>×PPS + <span className="text-ds-cyan font-bold">0.20</span>×IRS + <span className="text-ds-yellow font-bold">0.15</span>×AAS + <span className="text-ds-silver font-bold">0.10</span>×CVS) × <span className="text-ds-red font-bold">CDCF</span>
             </p>
           </div>
