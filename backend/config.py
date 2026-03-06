@@ -68,7 +68,6 @@ class Settings(BaseSettings):
         case_sensitive=False,
     )
 
-
 settings = Settings()
 
 # Inject into os.environ so modules that read os.getenv() directly can see them

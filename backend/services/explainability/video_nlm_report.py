@@ -142,6 +142,17 @@ class VideoNLMReport:
                 f"introduced by generative AI upsamplers."
             )
 
+        # Extract reasoning from advanced findings
+        advanced_findings = ltca_data.get('advanced_findings', [])
+        advanced_interp = []
+        for f in advanced_findings:
+            engine = f.get('engine', 'Unknown')
+            reasoning = f.get('reasoning', '')
+            if reasoning:
+                advanced_interp.append(f"{engine}: {reasoning}")
+        
+        advanced_text = "\n".join([f"- {t}" for t in advanced_interp]) if advanced_interp else "No advanced physiological anomalies detected."
+
         prompt = (
             f"You are an expert digital forensics analyst. A user just uploaded a video for you to analyze. "
             f"Your job is to explain to them EXACTLY why this video is {verdict} based on the forensic data below.\n\n"
@@ -152,15 +163,16 @@ class VideoNLMReport:
             f"- Motion Analysis: {temporal_interp}\n"
             f"- Noise Fingerprint: {noise_interp}\n"
             f"- Physics/Momentum: {physics_interp}\n"
-            f"- Biological/Heartbeat Analysis (rPPG): {rppg_interp}\n\n"
+            f"- Biological/Heartbeat Analysis (rPPG): {rppg_interp}\n"
+            f"- Advanced Physiological Forensics:\n{advanced_text}\n\n"
             f"INSTRUCTIONS:\n"
             f"Write a natural, conversational 3-paragraph explanation. Talk directly to the user.\n"
             f"Do NOT write like a robot. NEVER use robotic templates like 'The Deepscan pipeline computed a Media Authenticity Score of...' or 'Analysis indicates that...'.\n"
             f"Instead, speak like a real human expert who just looked at the data. For example:\n"
             f"'Looking at this video, it scores a {mas_score:.1f}/100, which puts it firmly in the {verdict} category. The biggest giveaway here is the biological data...'\n\n"
             f"Paragraph 1: State clearly if it's real or AI, referencing the overall score.\n"
-            f"Paragraph 2: Explain the biological heartbeat findings first (if any), then detail the pixel and noise anomalies.\n"
-            f"Paragraph 3: Explain the physics momentum or motion anomalies and give your final recommendation.\n"
+            f"Paragraph 2: Explain the biological and physiological findings (heartbeat, blinking, face mesh stability) as they are the hardest to fake.\n"
+            f"Paragraph 3: Explain the physics momentum or spectral anomalies and give your final recommendation.\n"
         )
 
         loop = asyncio.get_event_loop()

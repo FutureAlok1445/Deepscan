@@ -44,10 +44,13 @@ class BlinkAnalyzer:
     def analyze_frames(self, frames: list, fps: float = 30.0) -> dict:
         """
         Analyze a sequence of frames for blink patterns.
-        Returns a score (0-100) and details.
+        Using physiological constants for human blinking:
+        - Rate: 12-20 blinks per minute (at rest)
+        - Duration: 100ms - 400ms (3 to 12 frames at 30fps)
+        - Variability: Inter-blink intervals are stochastic (non-uniform).
         """
         if len(frames) < 10:
-            return {"score": 50.0, "detail": "Too few frames for blink analysis", "blinks_detected": 0}
+            return {"score": 50.0, "detail": "Insufficient data", "reasoning": "Sequence too short to establish a baseline blink rate."}
 
         ear_series = []
         face_found = False
@@ -55,20 +58,15 @@ class BlinkAnalyzer:
         for frame in frames:
             try:
                 gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
-                # Detect faces
-                faces = self.face_cascade.detectMultiScale(gray, scaleFactor=1.1, minNeighbors=4, minSize=(60, 60))
+                faces = self.face_cascade.detectMultiScale(gray, 1.1, 4, minSize=(60, 60))
                 if len(faces) == 0:
-                    ear_series.append(0.3)  # neutral if no face
+                    ear_series.append(0.3)
                     continue
                 
                 face_found = True
                 fx, fy, fw, fh = faces[0]
-                # Look for eyes in upper-half of face
                 upper_face = frame[fy:fy + fh//2, fx:fx + fw]
-                eyes = self.eye_cascade.detectMultiScale(
-                    cv2.cvtColor(upper_face, cv2.COLOR_BGR2GRAY),
-                    scaleFactor=1.1, minNeighbors=5, minSize=(20, 20)
-                )
+                eyes = self.eye_cascade.detectMultiScale(cv2.cvtColor(upper_face, cv2.COLOR_BGR2GRAY), 1.1, 5, minSize=(20, 20))
                 
                 if len(eyes) >= 2:
                     ears = [self._get_eye_aspect_ratio(upper_face[ey:ey+eh, ex:ex+ew]) for (ex, ey, ew, eh) in eyes[:2]]
@@ -82,7 +80,7 @@ class BlinkAnalyzer:
                 ear_series.append(0.3)
 
         if not face_found:
-            return {"score": 30.0, "detail": "No face detected — cannot perform blink analysis", "blinks_detected": 0}
+            return {"score": 30.0, "detail": "No face", "reasoning": "Facial region not isolated; EAR metrics cannot be computed."}
 
         # --- Blink detection from EAR series ---
         blink_durations = []
@@ -92,54 +90,59 @@ class BlinkAnalyzer:
         for ear in ear_series:
             if ear < self.EAR_THRESHOLD:
                 if not in_blink:
-                    in_blink = True
-                    blink_len = 1
+                    in_blink, blink_len = True, 1
                 else:
                     blink_len += 1
             else:
                 if in_blink:
-                    if self.MIN_BLINK_FRAMES <= blink_len <= self.MAX_BLINK_FRAMES:
+                    if 1 <= blink_len <= 15: # Broad range for raw detection
                         blink_durations.append(blink_len)
-                    in_blink = False
-                    blink_len = 0
+                    in_blink, blink_len = False, 0
 
         n_blinks = len(blink_durations)
         total_seconds = len(frames) / fps
         blink_rate = (n_blinks / total_seconds) * 60 if total_seconds > 0 else 0
 
-        # --- Scoring ---
+        # --- Scientific Scoring Logic ---
         score = 0.0
-        reasons = []
+        details = []
+        reasoning_list = []
 
-        # No blinks in > 5 seconds
-        if n_blinks == 0 and total_seconds > 5:
-            score += 70.0
-            reasons.append("No blinks detected — strongly suggests AI generation")
-        elif blink_rate < 3 and total_seconds > 8:
-            score += 40.0
-            reasons.append(f"Abnormally low blink rate ({blink_rate:.1f}/min; human avg: 15-20/min)")
-        elif blink_rate > 40:
-            score += 35.0
-            reasons.append(f"Unusually high blink frequency ({blink_rate:.1f}/min)")
+        # 1. Rate Check (Human baseline: 10-25/min)
+        if n_blinks == 0 and total_seconds > 6:
+            score += 75.0
+            details.append("Zero blinks")
+            reasoning_list.append(f"No blinks detected over {total_seconds:.1f}s. A physiological 'blinkless' state is a hallmark of older GAN generators and shallow deepfakes.")
+        elif blink_rate < 5:
+            score += 45.0
+            details.append(f"Low rate: {blink_rate:.1f}/m")
+            reasoning_list.append("Sub-optimal blink frequency detected (Hypometropic pattern).")
 
-        # Single-frame blinks (AI glitch)
+        # 2. Duration Check: Single-frame blinks (Glitches)
         single_frame_blinks = sum(1 for d in blink_durations if d <= 1)
-        if single_frame_blinks > 0:
-            score += min(single_frame_blinks * 25.0, 60.0)
-            reasons.append(f"{single_frame_blinks} single-frame blink(s) detected — physically impossible at {fps:.0f}fps")
+        if single_frame_blinks > 0 and fps >= 24:
+            penalty = min(single_frame_blinks * 20.0, 50.0)
+            score += penalty
+            details.append(f"{single_frame_blinks} glitches")
+            reasoning_list.append(f"Detected {single_frame_blinks} 'one-frame' blinks. At {fps:.0f}fps, a human blink physically requires ~100-300ms (3-9 frames). Near-instantaneous blinks are mathematical artifacts of frame-by-frame synthesis.")
 
-        # Robotic regularity (all blinks same duration)
-        if n_blinks >= 3 and np.std(blink_durations) < 0.5:
-            score += 30.0
-            reasons.append("All blinks identical duration — robotic regularity detected")
+        # 3. Regularity Check: Robotic uniformity
+        if n_blinks >= 3:
+            duration_std = np.std(blink_durations)
+            if duration_std < 0.4: # All blinks nearly identical length
+                score += 35.0
+                details.append("Uniform rhythm")
+                reasoning_list.append("Blink durations exhibit 'Robotic Regularity' (Standard Deviation < 0.4). Authentic human behavior is stochastic; perfectly timed blinks suggest parametric control.")
 
         score = float(np.clip(score, 0.0, 100.0))
-        detail = "; ".join(reasons) if reasons else f"Blink pattern normal ({n_blinks} blinks, {blink_rate:.1f}/min)"
+        detail_msg = "; ".join(details) if details else f"Normal ({n_blinks} blinks, {blink_rate:.1f}/min)"
+        reasoning_msg = " ".join(reasoning_list) if reasoning_list else "Blink patterns show natural frequency, duration, and temporal variance consistent with authentic human physiology."
 
-        logger.info(f"BlinkAnalyzer: score={score:.1f}, blinks={n_blinks}, rate={blink_rate:.1f}/min")
+        logger.info(f"BlinkAnalyzer: score={score:.1f}, rate={blink_rate:.1f}/min")
         return {
             "score": score,
-            "detail": detail,
+            "detail": detail_msg,
+            "reasoning": reasoning_msg,
             "blinks_detected": n_blinks,
             "blink_rate_per_min": round(blink_rate, 1),
         }

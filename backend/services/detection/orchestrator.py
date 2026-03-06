@@ -96,9 +96,8 @@ class DetectionOrchestrator:
         ltca_data = {}
         try:
             if category == "image":
-                score = await self.image_detector.predict_async(file_path)
-                findings.append({"engine": "Vision-Transformer-ViT", "score": round(score, 1),
-                                 "detail": "HuggingFace-backed spatial manipulation detection"})
+                score, img_findings = await self.image_detector.predict_async(file_path)
+                findings.extend(img_findings)
             elif category == "video":
                 # Run 9-engine VideoOrchestrator (returns score, ltca_data, frames)
                 score, ltca_data, frames = await self.video_detector.process_video(file_path, num_frames=16)

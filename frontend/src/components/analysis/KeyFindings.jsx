@@ -43,16 +43,32 @@ export default function KeyFindings({ findings = [] }) {
         return (
           <div
             key={i}
-            className={`flex items-start gap-3 p-4 border-3 border-ds-silver border-l-[6px] ${sev.border} ${sev.bg}`}
+            className={`flex items-start gap-4 p-5 border-3 border-ds-silver border-l-[8px] ${sev.border} ${sev.bg} shadow-[8px_8px_0px_rgba(0,0,0,0.3)] transition-transform hover:-translate-y-1`}
           >
-            <Icon className={`w-5 h-5 mt-0.5 flex-shrink-0 ${sev.color}`} />
+            <Icon className={`w-6 h-6 mt-0.5 flex-shrink-0 ${sev.color}`} />
             <div className="flex-1 min-w-0">
-              <p className={`font-grotesk font-bold text-sm ${sev.color}`}>
-                {finding.title || finding.module}
-              </p>
-              <p className="text-ds-silver/70 text-sm font-mono mt-1 leading-relaxed">
+              <div className="flex items-center justify-between gap-2 mb-1">
+                <p className={`font-grotesk font-black text-sm uppercase tracking-wider ${sev.color}`}>
+                  {finding.engine || finding.title || finding.module}
+                </p>
+                {finding.score != null && (
+                  <span className={`font-mono text-xs font-bold ${sev.color} px-2 py-0.5 border border-current opacity-60`}>
+                    {Math.round(finding.score)}%
+                  </span>
+                )}
+              </div>
+
+              <p className="text-ds-silver font-bold text-sm font-mono leading-snug">
                 {finding.detail || finding.description}
               </p>
+
+              {finding.reasoning && (
+                <div className="mt-3 p-3 bg-black/40 border-l-2 border-ds-silver/10 rounded-r-sm">
+                  <p className="text-ds-silver/60 text-[11px] font-mono leading-relaxed italic">
+                    <span className="text-ds-cyan/40 not-italic mr-1">ANALYSIS:</span> {finding.reasoning}
+                  </p>
+                </div>
+              )}
               {finding.confidence != null && (
                 <div className="mt-2 flex items-center gap-2">
                   <div className="flex-1 h-1.5 bg-ds-silver/10 rounded-full overflow-hidden">
