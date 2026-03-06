@@ -6,6 +6,7 @@ import useBackendStatus from '../../hooks/useBackendStatus';
 const NAV_LINKS = [
   { to: '/', label: 'Home' },
   { to: '/analyze', label: 'Analyze' },
+  { to: '/text-scan', label: 'Text Scan' },
   { to: '/history', label: 'History' },
   { to: '/learn', label: 'Learn' },
   { to: '/community', label: 'Community' },

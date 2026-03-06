@@ -5,38 +5,42 @@ def calculate_aacs(mas: float, pps: float, irs: float, aas: float, cvs: float,
     For audio files, PPS (heartbeat) and CVS (reverse image search) are not
     applicable, so their weight is redistributed to the engines that ARE relevant.
     For images, PPS and AAS may not apply. For video, all engines apply.
+    
+    The primary detector (MAS) always gets the highest weight. When both MAS and
+    AAS point the same direction for audio, confidence is maximal.
     """
-    # Base weights
-    weights = {"mas": 0.30, "pps": 0.25, "irs": 0.20, "aas": 0.15, "cvs": 0.10}
-    scores_map = {"mas": mas, "pps": pps, "irs": irs, "aas": aas, "cvs": cvs}
-
-    # Determine which engines are applicable based on media category
+    # Base weights per category — primary detector gets strong weight
     if category == "audio":
-        # For audio: MAS (audio detector) and AAS (7-sig audio) are primary,
-        # IRS (metadata) is secondary. PPS and CVS don't apply.
-        applicable = {"mas", "aas", "irs"}
+        # Audio: MAS + AAS both run 7-sig. Give heavy weight to detection.
+        # IRS only catches metadata issues (usually 0 for clean files)
+        weights = {"mas": 0.50, "aas": 0.40, "irs": 0.10}
+        scores_map = {"mas": mas, "aas": aas, "irs": irs}
     elif category == "image":
-        # For images: MAS (image detector), IRS (metadata), CVS (reverse search) apply.
-        # PPS (heartbeat) and AAS (audio) don't apply.
-        applicable = {"mas", "irs", "cvs"}
+        # Image: MAS (ViT) is primary, IRS (metadata) secondary, CVS (reverse search) tertiary
+        weights = {"mas": 0.60, "irs": 0.25, "cvs": 0.15}
+        scores_map = {"mas": mas, "irs": irs, "cvs": cvs}
     elif category == "video":
-        # All engines apply for video
-        applicable = {"mas", "pps", "irs", "aas", "cvs"}
+        # Video: all 5 engines, MAS dominates
+        weights = {"mas": 0.35, "pps": 0.20, "irs": 0.15, "aas": 0.15, "cvs": 0.15}
+        scores_map = {"mas": mas, "pps": pps, "irs": irs, "aas": aas, "cvs": cvs}
     else:
-        applicable = {"mas", "pps", "irs", "aas", "cvs"}
+        weights = {"mas": 0.30, "pps": 0.25, "irs": 0.20, "aas": 0.15, "cvs": 0.10}
+        scores_map = {"mas": mas, "pps": pps, "irs": irs, "aas": aas, "cvs": cvs}
 
-    # Calculate with only applicable engines, redistributing weights
-    total_weight = sum(weights[k] for k in applicable)
-    if total_weight <= 0:
-        return 50.0
+    # Weighted sum (weights already sum to ~1.0 per category)
+    total_weight = sum(weights.values())
+    weighted_sum = sum((w / total_weight) * scores_map[k] for k, w in weights.items())
 
-    weighted_sum = 0.0
-    for k in applicable:
-        # Normalize weight so applicable weights sum to 1.0
-        normalized_weight = weights[k] / total_weight
-        weighted_sum += normalized_weight * scores_map[k]
+    # Confidence boost: if ALL applicable engines agree strongly (>70 or <25), amplify signal
+    vals = list(scores_map.values())
+    if all(v >= 70 for v in vals if v > 0):
+        # All engines say fake — boost by 10%
+        weighted_sum = min(100.0, weighted_sum * 1.10)
+    elif all(v <= 25 for v in vals):
+        # All engines say real — push toward authentic
+        weighted_sum = max(0.0, weighted_sum * 0.90)
 
-    return max(0.0, min(100.0, weighted_sum))
+    return max(0.0, min(100.0, round(weighted_sum, 2)))
 
 
 def get_verdict(aacs: float) -> str:

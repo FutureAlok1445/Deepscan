@@ -13,7 +13,7 @@ except ImportError:
 
 from backend.config import settings
 from backend.api.v1.endpoints import (
-    analyze, analyze_url, analyze_image, live_scan, history, report, community, webhook, feedback
+    analyze, analyze_url, analyze_image, analyze_text, live_scan, history, report, community, webhook, feedback
 )
 from backend.services.detection.orchestrator import orchestrator
 from backend.services.IMageDetector.orchestrator import image_orchestrator
@@ -80,6 +80,7 @@ app.include_router(history.router, prefix="/api/v1/history", tags=["History"])
 app.include_router(report.router, prefix="/api/v1/report", tags=["Report"])
 app.include_router(community.router, prefix="/api/v1/community", tags=["Community"])
 app.include_router(feedback.router, prefix="/api/v1/feedback", tags=["Feedback"])
+app.include_router(analyze_text.router, prefix="/api/v1/analyze/text", tags=["Text Analysis"])
 app.include_router(webhook.router, prefix="/webhook", tags=["Webhook"])
 
 @app.get("/health", tags=["Health"])

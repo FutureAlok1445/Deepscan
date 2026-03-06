@@ -8,15 +8,18 @@ class CDCFEngine:
 
         # Only check contradictions between applicable engines
         if category == "audio":
-            applicable = ["mas", "aas", "irs"]
+            applicable = ["mas", "aas"]
         elif category == "image":
             applicable = ["mas", "irs", "cvs"]
+        elif category == "video":
+            applicable = keys
         else:
             applicable = keys
 
         contradictions, multiplier = [], 1.0
-        for k1, k2 in combinations(applicable, 2):
-            if abs(sub_scores[k1] - sub_scores[k2]) > 30.0:
+        active_scores = [(k, sub_scores[k]) for k in applicable if sub_scores[k] > 0]
+        for (k1, s1), (k2, s2) in combinations(active_scores, 2):
+            if abs(s1 - s2) > 30.0:
                 contradictions.append(f"{k1.upper()}↔{k2.upper()}")
                 multiplier *= 1.03
 

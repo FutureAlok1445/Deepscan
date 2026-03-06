@@ -370,3 +370,25 @@ export async function submitFeedback(args) {
     return { success: true };
   }
 }
+
+/**
+ * Analyze text for AI-generation detection.
+ * @param {string} text - The text to analyze
+ * @param {string} language - Language code (default 'en')
+ * @returns {Promise<Object>} Analysis result
+ */
+export async function analyzeText(text, language = 'en') {
+  const res = await api.post('/analyze/text', { text, language });
+  const result = res.data;
+  cacheResult(result.id, result);
+  cacheHistoryItem({
+    id: result.id,
+    score: result.score ?? result.aacs_score ?? 0,
+    aacs_score: result.aacs_score ?? result.score ?? 0,
+    verdict: result.verdict,
+    filename: `Text (${result.word_count || 0} words)`,
+    file_type: 'text',
+    created_at: result.created_at,
+  });
+  return result;
+}

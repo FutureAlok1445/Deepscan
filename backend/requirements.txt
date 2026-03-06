@@ -18,8 +18,9 @@ transformers==4.40.1
 xgboost==2.0.3
 shap==0.45.1
 librosa==0.10.1
-torch==2.2.2
-torchvision==0.17.2
+# torch & torchvision installed in Dockerfile with CPU-only build
+# torch==2.2.2
+# torchvision==0.17.2
 python-telegram-bot[job-queue]==21.1.1
 reportlab==4.1.0
 httpx==0.27.0

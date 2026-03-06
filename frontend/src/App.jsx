@@ -1,14 +1,28 @@
 ﻿import { Routes, Route, useLocation } from 'react-router-dom'
 import { Toaster } from 'react-hot-toast'
-import { useState, useEffect } from 'react'
+import { useState, useEffect, lazy, Suspense } from 'react'
 import Navbar from './components/layout/Navbar'
 import Footer from './components/layout/Footer'
 import Home from './pages/Home'
-import Analyze from './pages/Analyze'
-import Result from './pages/Result'
-import History from './pages/History'
-import Learn from './pages/Learn'
-import Community from './pages/Community'
+
+// Lazy-loaded pages for faster initial load
+const Analyze = lazy(() => import('./pages/Analyze'))
+const Result = lazy(() => import('./pages/Result'))
+const History = lazy(() => import('./pages/History'))
+const Learn = lazy(() => import('./pages/Learn'))
+const Community = lazy(() => import('./pages/Community'))
+const TextScan = lazy(() => import('./pages/TextScan'))
+
+function PageLoader() {
+  return (
+    <div className="min-h-[60vh] flex items-center justify-center">
+      <div className="text-center">
+        <div className="w-8 h-8 border-3 border-ds-red border-t-transparent rounded-full animate-spin mx-auto mb-3" />
+        <p className="font-mono text-xs text-ds-silver/40">Loading...</p>
+      </div>
+    </div>
+  )
+}
 
 function ScrollProgress() {
   const [width, setWidth] = useState(0)
@@ -48,14 +62,17 @@ export default function App() {
       }} />
       <Navbar transparent={isHome} />
       <main style={{ paddingTop: isHome ? 0 : 64 }}>
-        <Routes>
-          <Route path="/" element={<Home />} />
-          <Route path="/analyze" element={<Analyze />} />
-          <Route path="/result/:id" element={<Result />} />
-          <Route path="/history" element={<History />} />
-          <Route path="/learn" element={<Learn />} />
-          <Route path="/community" element={<Community />} />
-        </Routes>
+        <Suspense fallback={<PageLoader />}>
+          <Routes>
+            <Route path="/" element={<Home />} />
+            <Route path="/analyze" element={<Analyze />} />
+            <Route path="/result/:id" element={<Result />} />
+            <Route path="/history" element={<History />} />
+            <Route path="/learn" element={<Learn />} />
+            <Route path="/community" element={<Community />} />
+            <Route path="/text-scan" element={<TextScan />} />
+          </Routes>
+        </Suspense>
       </main>
       <Footer />
     </div>
