@@ -36,6 +36,14 @@ class Settings(BaseSettings):
     )
 
 settings = Settings()
+    HF_API_TOKEN: str = ""
+    GROQ_API_KEY: str = ""
+
+    model_config = SettingsConfigDict(
+        env_file=".env",
+        extra="ignore",
+        case_sensitive=False
+    )
 
 # Also inject into os.environ so modules that read os.getenv() directly can see them
 if settings.HF_API_TOKEN:

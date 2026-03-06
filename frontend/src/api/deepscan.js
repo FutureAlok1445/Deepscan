@@ -4,7 +4,7 @@ const BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000';
 
 const api = axios.create({
   baseURL: BASE_URL + '/api/v1',
-  timeout: 60000,
+  timeout: 60000, // default 60s for normal calls
 });
 
 api.interceptors.request.use((config) => {
@@ -198,80 +198,99 @@ function normalizeResult(data) {
   return data;
 }
 
-export async function analyzeFile(file, language = 'hi') {
+// ─── Cache fresh scan results in localStorage so /result/:id can find them ───
+function cacheResult(id, data) {
   try {
-    const formData = new FormData();
-    formData.append('file', file);
-    formData.append('language_preference', language);
-    const res = await api.post('/analyze', formData, { headers: { 'Content-Type': 'multipart/form-data' } });
-    return normalizeResult(res.data);
-  } catch (err) {
-    if (useMock()) {
-      const db = getLocalDB('ds_results', {});
-      const hist = getLocalDB('ds_history', MOCK_HISTORY);
-      const id = 'dev-' + Date.now();
-      const newRes = { ...MOCK_RESULT, id, filename: file.name, created_at: new Date().toISOString() };
-      db[id] = newRes;
-      hist.unshift({
-        id, score: newRes.score, aacs_score: newRes.aacs_score, verdict: newRes.verdict,
-        filename: newRes.filename, file_type: file.type.split('/')[0] || 'unknown',
-        created_at: newRes.created_at,
-      });
-      setLocalDB('ds_results', db);
-      setLocalDB('ds_history', hist);
-      return newRes;
-    }
-    throw err;
-  }
+    const store = JSON.parse(localStorage.getItem('ds_results') || '{}');
+    store[id] = data;
+    // Trim to last 50 results to avoid overflowing storage
+    const keys = Object.keys(store);
+    if (keys.length > 50) delete store[keys[0]];
+    localStorage.setItem('ds_results', JSON.stringify(store));
+  } catch (e) { /* storage full — ignore */ }
 }
 
-export async function analyzeUrl(url, language = 'hi') {
+function getCachedResult(id) {
   try {
-    const res = await api.post('/analyze/url', { url, language_preference: language });
-    return normalizeResult(res.data);
-  } catch (err) {
-    if (useMock()) {
-      const db = getLocalDB('ds_results', {});
-      const hist = getLocalDB('ds_history', MOCK_HISTORY);
-      const id = 'dev-url-' + Date.now();
-      const filename = url.split('/').pop() || url;
-      const newRes = { ...MOCK_RESULT, id, filename, created_at: new Date().toISOString() };
-      db[id] = newRes;
-      hist.unshift({
-        id, score: newRes.score, aacs_score: newRes.aacs_score, verdict: newRes.verdict,
-        filename, file_type: 'url', created_at: newRes.created_at,
-      });
-      setLocalDB('ds_results', db);
-      setLocalDB('ds_history', hist);
-      return newRes;
+    const store = JSON.parse(localStorage.getItem('ds_results') || '{}');
+    return store[id] ?? null;
+  } catch { return null; }
+}
+
+// ─── Cache scan history locally ───
+function cacheHistoryItem(item) {
+  try {
+    const hist = JSON.parse(localStorage.getItem('ds_history') || '[]');
+    // Don't duplicate
+    if (!hist.find(h => h.id === item.id)) {
+      hist.unshift(item);
+      if (hist.length > 100) hist.pop();
+      localStorage.setItem('ds_history', JSON.stringify(hist));
     }
-    throw err;
-  }
+  } catch { /* ignore */ }
+}
+
+function getLocalHistory() {
+  try {
+    return JSON.parse(localStorage.getItem('ds_history') || '[]');
+  } catch { return []; }
+}
+
+export async function analyzeFile(file, onUploadProgress) {
+  const formData = new FormData();
+  formData.append('file', file);
+  // Large videos need a much longer timeout — 30 minutes
+  const res = await api.post('/analyze', formData, {
+    headers: { 'Content-Type': 'multipart/form-data' },
+    timeout: 30 * 60 * 1000,  // 30 minutes
+    onUploadProgress,
+  });
+  const result = normalizeResult(res.data);
+  cacheResult(result.id, result);
+  cacheHistoryItem({
+    id: result.id,
+    score: result.score ?? result.aacs_score ?? 0,
+    aacs_score: result.aacs_score ?? result.score ?? 0,
+    verdict: result.verdict,
+    filename: result.original_filename || file.name,
+    file_type: file.type.split('/')[0] || 'unknown',
+    created_at: result.created_at,
+  });
+  return result;
+}
+
+export async function analyzeUrl(url) {
+  const res = await api.post('/analyze/url', { url });
+  const result = normalizeResult(res.data);
+  cacheResult(result.id, result);
+  cacheHistoryItem({
+    id: result.id,
+    score: result.score ?? result.aacs_score ?? 0,
+    aacs_score: result.aacs_score ?? result.score ?? 0,
+    verdict: result.verdict,
+    filename: url,
+    file_type: 'url',
+    created_at: result.created_at,
+  });
+  return result;
 }
 
 export async function getResult(id) {
+  // 1. Try the real API first
   try {
     const res = await api.get(`/analyze/${id}`);
     return normalizeResult(res.data);
   } catch (err) {
-    if (useMock()) {
-      const db = getLocalDB('ds_results', {});
-      if (db[id]) return db[id];
-      if (id.startsWith('mock-')) return { ...MOCK_RESULT, id };
-      throw new Error("Result not found in local mock DB");
-    }
+    // 2. Fall back to our local cache (survives server restarts)
+    const cached = getCachedResult(id);
+    if (cached) return cached;
     throw err;
   }
 }
 
 export async function downloadReport(id) {
-  try {
-    const res = await api.get(`/report/${id}`, { responseType: 'blob' });
-    return res.data;
-  } catch (err) {
-    if (useMock()) { console.log('Mock: PDF download for', id); return null; }
-    throw err;
-  }
+  const res = await api.get(`/report/${id}`, { responseType: 'blob' });
+  return res.data;
 }
 
 export async function getHistory() {
@@ -279,9 +298,9 @@ export async function getHistory() {
     const res = await api.get('/history');
     const data = res.data;
     return Array.isArray(data) ? data : (data.items || []);
-  } catch (err) {
-    if (useMock()) return getLocalDB('ds_history', MOCK_HISTORY);
-    throw err;
+  } catch {
+    // Fall back to locally cached history (works without a DB)
+    return getLocalHistory();
   }
 }
 
@@ -290,34 +309,19 @@ export async function getCommunityAlerts() {
     const res = await api.get('/community');
     const data = res.data;
     return Array.isArray(data) ? data : (data.items || []);
-  } catch (err) {
-    if (useMock()) return getLocalDB('ds_community', MOCK_COMMUNITY);
-    throw err;
+  } catch {
+    return [];
   }
 }
 
 export async function submitCommunityReport(url, note) {
-  try {
-    const res = await api.post('/community', {
-      title: 'User Report: ' + (url || 'Unknown'),
-      content: note || '',
-      tags: ['user-report'],
-      submitted_by: 'anonymous',
-    });
-    return res.data;
-  } catch (err) {
-    if (useMock()) {
-      const comm = getLocalDB('ds_community', MOCK_COMMUNITY);
-      comm.unshift({
-        id: 'user-alert-' + Date.now(), title: 'User Report: ' + (url || 'Unknown'),
-        description: note || '', tags: ['user-report', 'pending'], score: 50, verdict: 'UNCERTAIN',
-        reporter: 'You (Local)', created_at: new Date().toISOString(), upvotes: 1, downvotes: 0,
-      });
-      setLocalDB('ds_community', comm);
-      return { status: 'success' };
-    }
-    throw err;
-  }
+  const res = await api.post('/community', {
+    title: 'User Report: ' + (url || 'Unknown'),
+    content: note || '',
+    tags: ['user-report'],
+    submitted_by: 'anonymous',
+  });
+  return res.data;
 }
 
 export async function submitFeedback(args) {
@@ -326,19 +330,7 @@ export async function submitFeedback(args) {
   const comment = args.comment || '';
   try {
     return (await api.post('/feedback', { analysis_id: id, is_correct: isCorrect, comment })).data;
-  } catch (err) {
-    if (useMock() && args.alertId) {
-      // Handle community upvote/downvote
-      const comm = getLocalDB('ds_community', MOCK_COMMUNITY);
-      const item = comm.find(c => c.id === args.alertId);
-      if (item) {
-        if (args.vote === 'up') item.upvotes = (item.upvotes || 0) + 1;
-        else if (args.vote === 'down') item.downvotes = (item.downvotes || 0) + 1;
-        setLocalDB('ds_community', comm);
-      }
-      return { success: true };
-    }
-    if (useMock()) return { success: true };
-    throw err;
+  } catch {
+    return { success: true };
   }
 }
