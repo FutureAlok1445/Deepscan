@@ -51,6 +51,16 @@ async def test():
         status = "[OK]" if expected in engine_names else "[WARN] missing"
         print(f"{status} Engine: {expected}")
 
+    vd = ltca.get("video_description", {})
+    if vd:
+        print("\nVideo Description:")
+        print(f"  Setting: {vd.get('setting')}")
+        print(f"  People : {vd.get('people')}")
+        print(f"  Action : {vd.get('activity')}")
+        print(f"  Moments: {len(vd.get('moments', []))} found")
+    else:
+        print("\n[WARN] No video_description found in ltca_data")
+
     print("\n[PASS] Live API test complete.")
 
 if __name__ == "__main__":
