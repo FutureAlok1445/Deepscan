@@ -89,7 +89,7 @@ export default function Footer() {
               ))}
             </div>
             <p className="mt-4 text-white/60 text-xs font-mono">
-              Team Bug Bytes • HackHive 2.0 • Datta Meghe College of Engineering, Airoli
+              DeepScan Team • Multi-modal AI deepfake detection platform
             </p>
           </div>
         </div>

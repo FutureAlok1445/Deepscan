@@ -350,7 +350,7 @@ export default function Home() {
             </BrutalButton>
           </div>
           <p className="mt-6 text-xs font-mono text-ds-silver">
-            Team Bug Bytes — HackHive 2.0 — Datta Meghe College of Engineering, Airoli
+            DeepScan — Multi-modal AI deepfake detection platform
           </p>
         </div>
       </section>
@@ -511,7 +511,7 @@ function SpiderVerseHero() {
         <div className="hero-badge inline-flex items-center gap-2 px-5 py-2 border-3 border-ds-red/50 bg-ds-red/10 mb-8 backdrop-blur-sm">
           <span className="w-2 h-2 bg-ds-red rounded-full animate-pulse" />
           <span className="text-xs font-mono text-white uppercase tracking-widest font-bold">
-            HackHive 2.0 — Cybersecurity — PS-03 — Team Bug Bytes
+            DeepScan — AI Deepfake Detection
           </span>
           <span className="w-2 h-2 bg-ds-red rounded-full animate-pulse" />
         </div>
