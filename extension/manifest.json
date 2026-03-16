@@ -1,0 +1,44 @@
+{
+    "manifest_version": 3,
+    "name": "Deepscan AACS: Webmail Phishing & Deepfake Detector",
+    "version": "1.0",
+    "description": "Seamlessly detects AI-generated content and phishing attempts in your incoming web emails.",
+    "permissions": [
+        "activeTab",
+        "scripting",
+        "storage"
+    ],
+    "host_permissions": [
+        "*://mail.google.com/*",
+        "*://outlook.live.com/*",
+        "http://127.0.0.1:8000/*",
+        "http://localhost:8000/*"
+    ],
+    "background": {
+        "service_worker": "background.js"
+    },
+    "content_scripts": [
+        {
+            "matches": [
+                "*://mail.google.com/*",
+                "*://outlook.live.com/*"
+            ],
+            "js": [
+                "content.js"
+            ],
+            "css": [
+                "content.css"
+            ],
+            "run_at": "document_idle"
+        }
+    ],
+    "action": {
+        "default_popup": "popup.html",
+        "default_title": "Deepscan Status"
+    },
+    "icons": {
+        "16": "icons/icon16.png",
+        "48": "icons/icon48.png",
+        "128": "icons/icon128.png"
+    }
+}

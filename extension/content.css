@@ -1,0 +1,94 @@
+/* extension/content.css */
+/* Brutalist Theme styling adapted for the injected extension banner */
+
+.deepscan-banner {
+    border: 3px solid #333;
+    background-color: #0f0f1a;
+    color: #e0e0e0;
+    font-family: 'Space Mono', monospace;
+    margin: 10px 0 20px 0;
+    padding: 16px;
+    box-shadow: 4px 4px 0px rgba(0,0,0,0.5);
+    transition: all 0.2s ease-in-out;
+    position: relative;
+    overflow: hidden;
+}
+
+.deepscan-banner-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    border-bottom: 2px dashed #444;
+    padding-bottom: 8px;
+    margin-bottom: 8px;
+}
+
+.deepscan-title {
+    font-weight: 900;
+    font-size: 14px;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+}
+
+.deepscan-status {
+    font-weight: bold;
+    font-size: 12px;
+    padding: 2px 6px;
+    border: 1px solid #444;
+    text-transform: uppercase;
+}
+
+.deepscan-loading { border-color: #00f5ff; }
+.deepscan-safe { border-color: #00ff9d; }
+.deepscan-warning { border-color: #ffb800; }
+.deepscan-danger { border-color: #ff3c00; }
+.deepscan-error { border-color: #666; }
+
+.deepscan-safe .deepscan-status { color: #00ff9d; border-color: #00ff9d; background: rgba(0, 255, 157, 0.1); }
+.deepscan-warning .deepscan-status { color: #ffb800; border-color: #ffb800; background: rgba(255, 184, 0, 0.1); }
+.deepscan-danger .deepscan-status { color: #ff3c00; border-color: #ff3c00; background: rgba(255, 60, 0, 0.1); border-width: 2px; }
+
+.deepscan-banner-content {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    font-size: 13px;
+}
+
+.deepscan-metric {
+    display: flex;
+    justify-content: space-between;
+}
+
+.deepscan-value.font-mono {
+    font-weight: bold;
+}
+
+.deepscan-reasons {
+    margin-top: 8px;
+    padding-top: 8px;
+    border-top: 1px dotted #444;
+    font-size: 11px;
+    color: #999;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+/* Loading Animation */
+.deepscan-progress {
+    position: absolute;
+    bottom: 0;
+    left: 0;
+    height: 3px;
+    background: #00f5ff;
+    width: 0%;
+    animation: ds-load 2s infinite ease-in-out;
+}
+
+@keyframes ds-load {
+    0% { width: 0%; left: 0; right: auto; }
+    50% { width: 100%; left: 0; right: auto; }
+    51% { left: auto; right: 0; }
+    100% { width: 0%; left: auto; right: 0; }
+}
