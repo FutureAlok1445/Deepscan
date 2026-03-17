@@ -18,6 +18,7 @@ import ArbitrationSystem from '../components/analysis/ArbitrationSystem';
 
 // — Video: new unified dashboard
 import VideoResultDashboard from '../components/analysis/VideoResultDashboard';
+import ImageResultDashboard from '../components/analysis/ImageResultDashboard';
 
 // — Non-video legacy panels (audio / image)
 import KeyFindings from '../components/analysis/KeyFindings';
@@ -200,33 +201,11 @@ export default function Result() {
               </div>
             )}
 
-            {/* ══════════ IMAGE ══════════ */}
+            {/* ══════════ IMAGE — New Tabbed Dashboard ══════════ */}
             {isImage && (
-              <>
-                <div className="result-section">
-                  <ArbitrationSystem imageFile={originalFile} backendScore={score} />
-                </div>
-                <div className="result-section">
-                  <KeyFindings findings={result.findings || []} />
-                </div>
-                <div className="result-section">
-                  <SubScoreGrid subScores={result.sub_scores} />
-                </div>
-                <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 result-section">
-                  <CdcfPanel cdcf={result.cdcf} />
-                  <NarrativeExplanation narrative={result.narrative} />
-                </div>
-                {result.forensics && (
-                  <div className="result-section">
-                    <ForensicsViewer forensics={result.forensics} />
-                  </div>
-                )}
-                {result.gradcam && (
-                  <div className="result-section">
-                    <GradCamOverlay gradcam={result.gradcam} />
-                  </div>
-                )}
-              </>
+              <div className="result-section">
+                <ImageResultDashboard result={result} originalFile={originalFile} />
+              </div>
             )}
 
             {/* ══════════ AUDIO ══════════ */}
