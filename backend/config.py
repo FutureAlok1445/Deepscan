@@ -29,6 +29,11 @@ class Settings(BaseSettings):
     HF_API_TOKEN: str = "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"
     HUGGINGFACE_API_KEY: str = ""
     GROQ_API_KEY: str = ""
+    GOOGLE_API_KEY: str = ""
+
+    # ── LM Studio (local inference) ──
+    LMSTUDIO_BASE_URL: str = "http://127.0.0.1:1234/v1"
+    LMSTUDIO_MODEL: str = "qwen/qwen3.5-9b"  # exact model ID from LM Studio API
 
     # ── Telegram ──
     TELEGRAM_BOT_TOKEN: str = ""

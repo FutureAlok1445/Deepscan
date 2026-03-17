@@ -61,11 +61,14 @@ class SemanticContextAnalyzer:
             self.intent_analyzer = pipeline(
                 "zero-shot-classification",
                 model="facebook/bart-large-mnli",
-                revision="c626438"
+                revision="c626438",
+                use_safetensors=False,
+                model_kwargs={"tie_word_embeddings": False}
             )
             self.clip_image_analyzer = pipeline(
                 "zero-shot-image-classification",
-                model="openai/clip-vit-base-patch32"
+                model="openai/clip-vit-base-patch32",
+                use_safetensors=False
             )
             logger.info("SemanticContext DistilBERT and CLIP loaded.")
         except Exception as e:

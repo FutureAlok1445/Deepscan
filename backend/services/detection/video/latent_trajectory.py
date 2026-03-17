@@ -26,44 +26,58 @@ class LatentTrajectoryForensics:
             self.is_loaded = False
             logger.error(f"Failed to load LTCA engine: {e}")
 
-    def extract_sliding_windows(self, video_path, window_size=16, stride=8):
+    def extract_from_frames(self, frames, window_size=16, stride=4):
         """
-        Extracts overlapping video volumes to track evolution over time.
+        Extracts overlapping video volumes from pre-decoded frames (memory-efficient).
         """
         try:
-            cap = cv2.VideoCapture(video_path)
-            frames = []
-            while True:
-                ret, frame = cap.read()
-                if not ret: break
-                frame = cv2.resize(frame, (112, 112))
-                frames.append(frame)
-            cap.release()
-            
             if len(frames) < window_size:
                 return None
 
-            # Create sliding windows
+            # Limit total windows to prevent OOM / massive compute if frames is large
+            # But 100-150 frames is safe.
             clips = []
             for i in range(0, len(frames) - window_size + 1, stride):
-                clip = frames[i : i + window_size]
+                clip = []
+                for f in frames[i : i + window_size]:
+                    # Quick resize to 112x112 if not already
+                    if f.shape[0] != 112 or f.shape[1] != 112:
+                        f = cv2.resize(f, (112, 112))
+                    clip.append(f)
+                
                 # Convert to Tensor (C, T, H, W)
-                tensor = torch.tensor(np.array(clip), dtype=torch.float32).permute(3, 0, 1, 2)
-                tensor = tensor.to(self.device) / 255.0
+                tensor = torch.from_numpy(np.array(clip)).to(torch.float32).permute(3, 0, 1, 2)
+                tensor = tensor / 255.0
                 tensor = (tensor - self.mean) / self.std
                 clips.append(tensor)
                 
-            # Stack into batch: (Batch_Size, 3, 16, 112, 112)
-            return torch.stack(clips)
+            if not clips: return None
+            return torch.stack(clips).to(self.device)
         except Exception as e:
-            logger.error(f"Error extracting sliding windows: {e}")
+            logger.error(f"Error extracting windows from frames: {e}")
             return None
 
-    def analyze_trajectory(self, video_path):
+    def analyze_trajectory(self, video_path_or_frames):
+        """
+        Can accept a video_path or a list of numpy frames.
+        """
         if not self.is_loaded:
              return {"is_fake": False, "confidence": 0, "reason": "Engine not loaded", "trajectory_plot": []}
 
-        batch = self.extract_sliding_windows(video_path)
+        if isinstance(video_path_or_frames, str):
+            # If path provided, decode frames here (limited to 128 for safety)
+            cap = cv2.VideoCapture(video_path_or_frames)
+            frames = []
+            while len(frames) < 128:
+                ret, f = cap.read()
+                if not ret: break
+                frames.append(f)
+            cap.release()
+            batch = self.extract_from_frames(frames)
+        else:
+            # Optimized path: uses pre-extracted frames from Orchestrator
+            batch = self.extract_from_frames(video_path_or_frames)
+        
         if batch is None:
              return {"is_fake": False, "confidence": 0, "reason": "Video too short", "trajectory_plot": []}
 
