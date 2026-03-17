@@ -26,6 +26,7 @@ import VideoDescription from '../components/analysis/VideoDescription';
 import ShareVerdict from '../components/accessibility/ShareVerdict';
 import DownloadReport from '../components/accessibility/DownloadReport';
 import ArbitrationSystem from '../components/analysis/ArbitrationSystem';
+import ElaHeatmapViewer from '../components/analysis/ElaHeatmapViewer';
 
 export default function Result() {
   const { id } = useParams();
@@ -161,6 +162,16 @@ export default function Result() {
             </div>
           </BrutalCard>
         </div>
+
+        {/* --- Image ELA Heatmap Viewer (JET thermal, reference-quality) --- */}
+        {result.file_type && result.file_type.includes('image') && result.forensics?.ela && (
+          <div className="result-section">
+            <ElaHeatmapViewer
+              elaData={result.forensics.ela}
+              imageFile={originalFile}
+            />
+          </div>
+        )}
 
         {/* --- Image Forensics (Arbitration System) --- */}
         {result.file_type && result.file_type.includes('image') && (
