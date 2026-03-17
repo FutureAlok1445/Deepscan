@@ -180,7 +180,6 @@ class VisualForensicsDetector:
                 "image-classification",
                 model="umm-maybe/AI-image-detector",
                 device=device_id,
-                use_safetensors=False
             )
             logger.info("VisualForensics ViT AI-detector loaded.")
 
