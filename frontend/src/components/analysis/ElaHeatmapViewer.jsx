@@ -9,7 +9,7 @@ const TABS = [
 
 const SEV_COLOR = { HIGH: '#ff3c00', MEDIUM: '#ffd700', LOW: '#00f5ff' };
 
-export default function ElaHeatmapViewer({ elaData, imageFile }) {
+export default function ElaHeatmapViewer({ elaData, imageFile, systemScore, systemVerdict }) {
   const canvasRef = useRef(null);
   
   const [mode, setMode]               = useState('blend');
@@ -345,21 +345,32 @@ export default function ElaHeatmapViewer({ elaData, imageFile }) {
         />
       </div>
 
-      {/* Verdict & Score (Exactly like reference UI layout for bottom bar) */}
+      {/* Verdict & Score (Synced with System Result) */}
       {scoreData && (
         <div className="bg-[#2a2a2a] px-5 py-3 border-t border-ds-silver/20 flex flex-wrap items-center justify-between gap-3">
           <div className="flex flex-col gap-1">
             <div className="flex items-center gap-2 text-[13px] font-bold">
-              <div className="w-[18px] h-[18px] rounded-full text-[9.5px] text-white flex items-center justify-center" style={{ background: scoreData.score > 62 ? '#ff4422' : scoreData.score > 32 ? '#ffaa00' : '#00cc55'}}>!</div>
-              <span className={scoreData.score > 62 ? 'text-[#ff5533]' : scoreData.score > 32 ? 'text-[#ffaa00]' : 'text-[#00cc55]'}>
-                {scoreData.verdict === 'FAKE' ? 'AI detected' : scoreData.verdict === 'PARTIAL' ? 'Partial AI detected' : 'Likely authentic'}
-              </span>
-              <span className="px-3 py-1 bg-[#ff4400] text-white rounded font-mono font-bold text-xs" style={{ background: scoreData.score > 62 ? '#ff4422' : scoreData.score > 32 ? '#ffaa00' : '#00cc55'}}>
-                {scoreData.score}%
-              </span>
+              {/* Score-dependent color logic */}
+              {(() => {
+                const finalScore = systemScore ?? scoreData.score;
+                const finalVerdict = systemVerdict?.label ?? (scoreData.verdict === 'FAKE' ? 'AI detected' : scoreData.verdict === 'PARTIAL' ? 'Partial AI detected' : 'Likely authentic');
+                const finalColor = finalScore >= 70 ? '#ff4422' : finalScore >= 40 ? '#ffaa00' : '#00cc55';
+                
+                return (
+                  <>
+                    <div className="w-[18px] h-[18px] rounded-full text-[9.5px] text-white flex items-center justify-center font-black" style={{ background: finalColor }}>!</div>
+                    <span style={{ color: finalColor }}>
+                      {finalVerdict}
+                    </span>
+                    <span className="px-3 py-1 text-white rounded font-mono font-bold text-xs" style={{ background: finalColor }}>
+                      {finalScore}%
+                    </span>
+                  </>
+                );
+              })()}
             </div>
             <div className="text-[11.5px] text-[#888] font-mono leading-tight max-w-[500px]">
-              {scoreData.summary.substring(0, 100)}...
+              {scoreData.summary}
             </div>
           </div>
           <button className="flex items-center gap-2 px-5 py-2.5 border-[1.5px] border-[#aaa] rounded-lg bg-transparent text-[#e8edf5] text-[13px] font-bold font-syne hover:bg-white/5 hover:border-white transition-all flex-shrink-0">

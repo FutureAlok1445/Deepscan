@@ -165,6 +165,8 @@ export default function Result() {
             <ElaHeatmapViewer
               elaData={result.forensics.ela}
               imageFile={originalFile}
+              systemScore={score}
+              systemVerdict={verdict}
             />
           </div>
         )}
