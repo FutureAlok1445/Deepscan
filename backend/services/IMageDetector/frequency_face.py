@@ -154,31 +154,47 @@ class FrequencyAnalyzer:
             if image is None:
                 raise ValueError("Could not read grayscale for FrequencyAnalyzer")
 
+            # Apply FFT
             f_transform = np.fft.fft2(image)
             f_shift = np.fft.fftshift(f_transform)
             magnitude_spectrum = 20 * np.log(np.abs(f_shift) + 1e-8)
 
             rows, cols = image.shape
             crow, ccol = rows // 2, cols // 2
-            mask_size = 30
-            magnitude_spectrum[crow - mask_size:crow + mask_size, ccol - mask_size:ccol + mask_size] = 0
+            
+            # Mask DC (center) and very low frequencies
+            m_size = 15
+            magnitude_spectrum[crow - m_size:crow + m_size, ccol - m_size:ccol + m_size] = 0
 
+            # 1. Total High-Freq Energy
             high_freq_energy = np.mean(magnitude_spectrum[magnitude_spectrum > 0])
 
+            # 2. Spectral Peak Detection (Checkerboard Artifacts)
+            # Find local maxima in the spectrum that are significantly higher than the mean.
+            # Real photos have decaying power; GANs have "spikes" at grid intervals.
+            threshold = np.mean(magnitude_spectrum) + 3.5 * np.std(magnitude_spectrum)
+            peaks = np.where(magnitude_spectrum > threshold)
+            peak_count = len(peaks[0])
+            
+            # Normalize peak count by image size
+            norm_peak_density = (peak_count / (rows * cols)) * 10000
+
+            ai_indicators = []
+            freq_score = 85.0 # Start high (authentic)
+
+            if norm_peak_density > 15.0:
+                freq_score -= 50.0
+                ai_indicators.append(f"Grid artifacts detected (Spectral Peak Density={norm_peak_density:.2f}). Highly characteristic of GAN/Diffusion synthesis.")
+            
             if high_freq_energy > 230:
-                result["score_frequency"] = 25.0
-                result["details"].append(
-                    f"Abnormal high-frequency spectrum (Energy={high_freq_energy:.1f}). "
-                    "Possible GAN checkerboard artifact or upscaling artifact."
-                )
-            elif high_freq_energy < 150:
-                result["score_frequency"] = 35.0
-                result["details"].append(
-                    f"Unusually low high-frequency spectrum (Energy={high_freq_energy:.1f}). "
-                    "Consistent with diffusion model over-smoothing."
-                )
-            else:
-                result["score_frequency"] = 85.0
+                freq_score -= 20.0
+                ai_indicators.append(f"Abnormal high-frequency energy ({high_freq_energy:.1f}). Possible upscaling or artificial sharpening.")
+            elif high_freq_energy < 140:
+                freq_score -= 30.0
+                ai_indicators.append(f"Suspiciously low texture energy ({high_freq_energy:.1f}). Matches diffusion model over-smoothing.")
+
+            result["score_frequency"] = max(0, min(100, freq_score))
+            result["details"] = ai_indicators if ai_indicators else ["Natural frequency spectrum detected (no periodic AI artifacts)."]
 
         except Exception as e:
             logger.error(f"Error in frequency analysis: {e}")

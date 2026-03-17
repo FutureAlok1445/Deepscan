@@ -4,24 +4,21 @@ import { Eye, Layers } from 'lucide-react';
 
 export default function GradCamOverlay({ gradcam }) {
   const [showOverlay, setShowOverlay] = useState(true);
-  const [opacity, setOpacity] = useState(60);
+  const [opacity, setOpacity] = useState(100);
 
-  if (!gradcam) {
-    return (
-      <BrutalCard className="text-center py-8">
-        <p className="text-ds-silver/50 font-mono text-sm">No Grad-CAM data available</p>
-      </BrutalCard>
-    );
+  if (!gradcam || !gradcam.heatmap_url) {
+    return null; // hide entirely if no heatmap
   }
 
-  const { original_url, heatmap_url, regions = [] } = gradcam;
+  const { original_url, heatmap_url, heatmap_label, regions = [] } = gradcam;
+  const title = heatmap_label || 'Grad-CAM Heatmap';
 
   return (
     <BrutalCard className="space-y-4">
       <div className="flex items-center justify-between">
         <h3 className="font-grotesk font-bold text-ds-silver text-lg uppercase tracking-wider flex items-center gap-2">
           <Eye className="w-5 h-5 text-ds-green" />
-          Grad-CAM
+          {title}
         </h3>
         <div className="flex items-center gap-3">
           <button
@@ -39,7 +36,7 @@ export default function GradCamOverlay({ gradcam }) {
       </div>
 
       {/* Image container */}
-      <div className="relative border-3 border-ds-silver/30 overflow-hidden bg-ds-bg">
+      <div className="relative border-3 border-ds-silver/30 overflow-hidden bg-black">
         {original_url && (
           <img
             src={original_url}
@@ -47,12 +44,15 @@ export default function GradCamOverlay({ gradcam }) {
             className="w-full h-64 object-cover"
           />
         )}
-        {showOverlay && heatmap_url && (
+        {/* ELA / Grad-CAM heatmap — shown full-width if no original */}
+        {heatmap_url && (
           <img
             src={heatmap_url}
-            alt="Grad-CAM heatmap"
-            className="absolute inset-0 w-full h-64 object-cover transition-opacity duration-300"
-            style={{ opacity: opacity / 100 }}
+            alt={title}
+            className={`w-full object-contain transition-opacity duration-300 ${
+              original_url ? 'absolute inset-0 h-64' : 'max-h-80'
+            }`}
+            style={{ opacity: original_url ? opacity / 100 : 1 }}
           />
         )}
 

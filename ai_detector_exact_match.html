@@ -1,0 +1,454 @@
+<!DOCTYPE html>
+<html>
+<head>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=Syne:wght@400;700;800&display=swap');
+  *{margin:0;padding:0;box-sizing:border-box}
+  body{background:#1a1a1a;color:#e8edf5;font-family:'Syne',sans-serif;min-height:100vh}
+
+  header{display:flex;align-items:center;justify-content:space-between;padding:13px 22px;background:#111;border-bottom:1px solid #2a2a2a}
+  .logo{font-size:1.1rem;font-weight:800;display:flex;align-items:center;gap:7px}
+  .logo em{color:#ff6622;font-style:normal}
+  .dot{width:7px;height:7px;background:#ff3c3c;border-radius:50%;animation:pulse 2s infinite}
+  @keyframes pulse{0%,100%{opacity:1}50%{opacity:0.3}}
+  .badge{font-size:0.6rem;font-family:'Space Mono',monospace;background:rgba(255,100,30,0.1);border:1px solid rgba(255,100,30,0.3);color:#ff6622;padding:3px 8px;border-radius:4px}
+
+  .main{max-width:900px;margin:0 auto;padding:28px 18px}
+  h1{font-size:clamp(1.5rem,3.5vw,2.3rem);font-weight:800;letter-spacing:-0.5px;margin-bottom:4px}
+  h1 span{color:#ff6622}
+  .sub{color:#666;font-size:0.72rem;font-family:'Space Mono',monospace;margin-bottom:20px}
+
+  /* Upload */
+  .upload-card{background:#222;border:1px solid #333;border-radius:12px;padding:18px;margin-bottom:12px}
+  .upload-label{font-size:0.7rem;color:#666;font-family:'Space Mono',monospace;text-transform:uppercase;letter-spacing:1px;margin-bottom:10px}
+  .file-row{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+  #fileInput{display:none}
+  .pick-btn{display:inline-flex;align-items:center;gap:6px;padding:9px 16px;background:rgba(255,100,30,0.15);border:1px solid rgba(255,100,30,0.4);border-radius:7px;color:#ff6622;font-size:0.78rem;font-weight:700;font-family:'Syne',sans-serif;cursor:pointer;transition:all .2s}
+  .pick-btn:hover{background:rgba(255,100,30,0.25)}
+  .pick-btn:disabled{opacity:.4;cursor:not-allowed}
+  .fname{font-size:0.73rem;font-family:'Space Mono',monospace;color:#666;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .clr-btn{background:none;border:none;color:#555;cursor:pointer;font-size:0.9rem;padding:3px;display:none}
+  .clr-btn.show{display:block}
+  .thumb-row{display:none;margin-top:11px;align-items:center;gap:10px}
+  .thumb-row.show{display:flex}
+  #thumbImg{height:55px;border-radius:5px;object-fit:cover;border:1px solid #333}
+  .thumb-meta{font-size:0.67rem;font-family:'Space Mono',monospace;color:#555}
+
+  .btn-row{display:flex;gap:10px;margin-bottom:3px}
+  .go-btn{flex:1;padding:13px;background:linear-gradient(135deg,#ff6622,#cc3300);border:none;border-radius:9px;color:#fff;font-size:0.88rem;font-weight:800;font-family:'Syne',sans-serif;cursor:pointer;transition:all .25s}
+  .go-btn:hover:not(:disabled){transform:translateY(-2px);box-shadow:0 8px 20px rgba(255,80,0,0.35)}
+  .go-btn:disabled{opacity:.4;cursor:not-allowed;transform:none}
+  .demo-btn{padding:13px 15px;background:#222;border:1px solid #333;border-radius:9px;color:#666;font-size:0.72rem;font-family:'Space Mono',monospace;cursor:pointer;transition:all .2s}
+  .demo-btn:hover:not(:disabled){background:#2a2a2a;color:#aaa}
+  .demo-btn:disabled{opacity:.4;cursor:not-allowed}
+
+  /* Loader */
+  .loader{display:none;text-align:center;padding:30px}
+  .loader.show{display:block}
+  .spin{width:42px;height:42px;border:2px solid rgba(255,100,30,0.15);border-top-color:#ff6622;border-radius:50%;animation:spin .85s linear infinite;margin:0 auto 12px}
+  @keyframes spin{to{transform:rotate(360deg)}}
+  .loader p{font-size:0.73rem;font-family:'Space Mono',monospace;color:#555}
+  .step{color:#ff6622;font-size:0.66rem;margin-top:5px}
+  .prog{width:200px;height:2px;background:#2a2a2a;border-radius:2px;margin:9px auto 0}
+  .prog-bar{height:100%;background:linear-gradient(90deg,#ff6622,#ffaa00);border-radius:2px;transition:width .3s ease;width:0}
+
+  /* Result */
+  .result{display:none;margin-top:18px;background:#222;border-radius:14px;overflow:hidden;border:1px solid #333}
+  .result.show{display:block}
+
+  /* Image + heatmap canvas — the core */
+  .img-box{position:relative;background:#000;line-height:0}
+  #mainCanvas{display:block;width:100%;height:auto}
+
+  /* Bottom bar exactly like isfake.ai */
+  .bottom-bar{background:#2a2a2a;padding:14px 20px;display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;border-top:1px solid #333}
+  .ai-detected{display:flex;align-items:flex-start;gap:8px;flex-direction:column}
+  .ai-msg{display:flex;align-items:center;gap:7px;font-size:0.82rem;font-weight:600}
+  .ai-icon{width:18px;height:18px;background:#ff3c3c;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:0.6rem;flex-shrink:0}
+  .ai-sub{font-size:0.72rem;color:#888;font-family:'Space Mono',monospace}
+  .score-pill{background:#ff4400;color:#fff;padding:4px 12px;border-radius:5px;font-size:0.8rem;font-weight:700;font-family:'Space Mono',monospace}
+  .report-btn{display:flex;align-items:center;gap:8px;padding:11px 22px;border:1.5px solid #aaa;border-radius:7px;background:transparent;color:#e8edf5;font-size:0.82rem;font-weight:700;font-family:'Syne',sans-serif;cursor:pointer;transition:all .2s;flex-shrink:0}
+  .report-btn:hover{background:rgba(255,255,255,0.05);border-color:#fff}
+
+  /* View toggle tabs */
+  .view-tabs{display:flex;gap:1px;background:#1a1a1a;border-bottom:1px solid #333}
+  .vtab{flex:1;padding:9px;background:#222;font-size:0.68rem;font-family:'Space Mono',monospace;color:#555;border:none;cursor:pointer;transition:all .2s;text-align:center}
+  .vtab:hover{background:#2a2a2a;color:#aaa}
+  .vtab.active{background:#2a2a2a;color:#ff6622;border-bottom:2px solid #ff6622}
+  .intensity-row{display:flex;align-items:center;gap:8px;padding:8px 16px;background:#1e1e1e;border-bottom:1px solid #2a2a2a}
+  .intensity-row label{font-size:0.62rem;font-family:'Space Mono',monospace;color:#555}
+  #slider{width:100px;accent-color:#ff6622;cursor:pointer}
+  .slider-val{font-size:0.62rem;font-family:'Space Mono',monospace;color:#ff6622;min-width:28px}
+
+  /* Signal cards */
+  .signals{display:grid;grid-template-columns:1fr 1fr;gap:8px;padding:14px}
+  @media(max-width:500px){.signals{grid-template-columns:1fr}}
+  .sig{background:#1e1e1e;border:1px solid #2a2a2a;border-radius:8px;padding:10px 12px;display:flex;gap:8px}
+  .sig-ic{font-size:0.85rem;margin-top:1px;flex-shrink:0}
+  .sig-body{flex:1}
+  .sig-name{font-size:0.69rem;font-weight:700;margin-bottom:2px}
+  .sig-desc{font-size:0.62rem;color:#555;font-family:'Space Mono',monospace;line-height:1.4}
+  .sig-bar{height:2px;background:#2a2a2a;border-radius:2px;margin-top:6px}
+  .sig-fill{height:100%;border-radius:2px;transition:width 1.3s ease}
+</style>
+</head>
+<body>
+
+<header>
+  <div class="logo"><div class="dot"></div>DETECT<em>AI</em></div>
+  <div class="badge">ELA FORENSICS</div>
+</header>
+
+<main class="main">
+  <h1>AI IMAGE <span>DETECTOR</span></h1>
+  <p class="sub">// client-side ELA heatmap · no server needed · instant analysis</p>
+
+  <div class="upload-card">
+    <div class="upload-label">Your Image</div>
+    <div class="file-row">
+      <button class="pick-btn" id="pickBtn">📁 Choose File</button>
+      <input type="file" id="fileInput" accept="image/*">
+      <span class="fname" id="fname">No file selected</span>
+      <button class="clr-btn" id="clrBtn">✕</button>
+    </div>
+    <div class="thumb-row" id="thumbRow">
+      <img id="thumbImg" alt="">
+      <div class="thumb-meta" id="thumbMeta"></div>
+    </div>
+  </div>
+
+  <div class="btn-row">
+    <button class="go-btn" id="goBtn" disabled>🔬 ANALYZE IMAGE</button>
+    <button class="demo-btn" id="demoBtn">▶ DEMO</button>
+  </div>
+
+  <div class="loader" id="loader">
+    <div class="spin"></div>
+    <p>Running forensic analysis...</p>
+    <div class="step" id="stepTxt">Initializing</div>
+    <div class="prog"><div class="prog-bar" id="progBar"></div></div>
+  </div>
+
+  <div class="result" id="result">
+
+    <div class="view-tabs">
+      <button class="vtab active" data-m="blend">🌡 Heatmap + Image</button>
+      <button class="vtab" data-m="heat">🔥 Heatmap Only</button>
+      <button class="vtab" data-m="orig">📷 Original</button>
+    </div>
+
+    <div class="intensity-row">
+      <label>HEATMAP INTENSITY</label>
+      <input type="range" id="slider" min="10" max="100" value="70">
+      <span class="slider-val" id="sliderVal">70%</span>
+    </div>
+
+    <div class="img-box">
+      <canvas id="mainCanvas"></canvas>
+    </div>
+
+    <div class="bottom-bar">
+      <div class="ai-detected">
+        <div class="ai-msg">
+          <div class="ai-icon">!</div>
+          <span id="aiMsg">AI detected</span>
+          <span class="score-pill" id="scorePill">—%</span>
+        </div>
+        <div class="ai-sub" id="aiSub">Analysis complete</div>
+      </div>
+      <button class="report-btn">📋 Report</button>
+    </div>
+
+    <div class="signals" id="signalsGrid"></div>
+  </div>
+</main>
+
+<script>
+const $ = id => document.getElementById(id);
+let file=null, origImg=null, elaData=null, noiseData=null;
+let W=0, H=0, mode='blend';
+
+// ── File ──────────────────────────────────────────────────
+$('pickBtn').onclick = () => $('fileInput').click();
+$('fileInput').onchange = e => { if(e.target.files[0]) setFile(e.target.files[0]); };
+$('clrBtn').onclick = reset;
+
+function setFile(f){
+  file=f;
+  $('fname').textContent=f.name;
+  $('clrBtn').classList.add('show');
+  $('thumbImg').src=URL.createObjectURL(f);
+  $('thumbMeta').textContent=(f.size/1024/1024).toFixed(2)+' MB';
+  $('thumbRow').classList.add('show');
+  $('goBtn').disabled=false;
+}
+function reset(){
+  file=null; origImg=null; elaData=null; noiseData=null;
+  $('fname').textContent='No file selected'; $('clrBtn').classList.remove('show');
+  $('thumbRow').classList.remove('show'); $('thumbImg').src=''; $('fileInput').value='';
+  $('goBtn').disabled=true; $('result').classList.remove('show');
+}
+
+// ── Tabs & slider ─────────────────────────────────────────
+document.querySelectorAll('.vtab').forEach(b=>{
+  b.onclick=()=>{
+    document.querySelectorAll('.vtab').forEach(x=>x.classList.remove('active'));
+    b.classList.add('active'); mode=b.dataset.m;
+    if(origImg) draw();
+  };
+});
+$('slider').oninput=()=>{ $('sliderVal').textContent=$('slider').value+'%'; if(origImg) draw(); };
+
+// ── Run ───────────────────────────────────────────────────
+$('goBtn').onclick  = ()=>run(false);
+$('demoBtn').onclick = ()=>run(true);
+
+function busy(on){ $('loader').classList.toggle('show',on); $('goBtn').disabled=on; $('demoBtn').disabled=on; $('pickBtn').disabled=on; }
+function step(t){ $('stepTxt').textContent=t; }
+function prog(v){ $('progBar').style.width=v+'%'; }
+function tick(){ return new Promise(r=>setTimeout(r,20)); }
+function loadImg(src){
+  return new Promise((res,rej)=>{ const i=new Image(); i.crossOrigin='anonymous'; i.onload=()=>res(i); i.onerror=rej; i.src=src; });
+}
+
+async function run(demo){
+  busy(true); $('result').classList.remove('show'); prog(0);
+  try {
+    step('Loading image...');
+    origImg = demo ? await makeDemo() : await loadImg(URL.createObjectURL(file));
+    prog(15);
+
+    const maxW=Math.min(origImg.width, 840);
+    const sc=maxW/origImg.width;
+    W=Math.round(origImg.width*sc); H=Math.round(origImg.height*sc);
+    $('mainCanvas').width=W; $('mainCanvas').height=H;
+
+    step('Computing Error Level Analysis...');
+    await tick();
+    elaData = await computeELA(origImg, W, H);
+    prog(55);
+
+    step('Computing noise residuals...');
+    await tick();
+    noiseData = await computeNoise(origImg, W, H);
+    prog(80);
+
+    step('Scoring...');
+    await tick();
+    const r = scoreImage(elaData, noiseData, W, H);
+    prog(100); await tick();
+
+    draw();
+    renderUI(r, demo);
+    busy(false);
+    $('result').classList.add('show');
+  } catch(e){ busy(false); step('❌ '+e.message); }
+}
+
+// ── THE KEY FUNCTION: draw heatmap over image ─────────────
+function draw(){
+  const ctx=$('mainCanvas').getContext('2d');
+  ctx.clearRect(0,0,W,H);
+
+  if(mode==='orig'){
+    ctx.drawImage(origImg,0,0,W,H);
+    return;
+  }
+
+  const intensity=parseInt($('slider').value)/100;
+  const ela=elaData.data, ns=noiseData.data;
+
+  // Build thermal pixel map covering EVERY pixel
+  const thermal=new ImageData(W,H);
+  for(let i=0;i<W*H*4;i+=4){
+    // Combine ELA + noise into single 0-1 anomaly value
+    const elaV=ela[i]/255;
+    const nsV=ns[i]/255;
+    const anomaly=Math.min(1, elaV*0.75 + nsV*0.25);
+
+    // Map to thermal color — EVERY pixel gets a color
+    // low anomaly = deep blue, high = red/white
+    const {r,g,b}=thermalColor(anomaly);
+    thermal.data[i]=r;
+    thermal.data[i+1]=g;
+    thermal.data[i+2]=b;
+    thermal.data[i+3]=255;
+  }
+
+  // Draw thermal to offscreen
+  const offH=document.createElement('canvas'); offH.width=W; offH.height=H;
+  offH.getContext('2d').putImageData(thermal,0,0);
+
+  if(mode==='heat'){
+    // Pure heatmap — like isfake.ai Image 2: thermal dominant, original faint underneath
+    // First draw original at low opacity
+    ctx.globalAlpha=0.25;
+    ctx.drawImage(origImg,0,0,W,H);
+    ctx.globalAlpha=1;
+    // Then thermal on top strong
+    ctx.globalAlpha=intensity*0.92;
+    ctx.drawImage(offH,0,0);
+    ctx.globalAlpha=1;
+  } else {
+    // BLEND mode — like isfake.ai Image 1: original clearly visible, heatmap colors on top
+    // Draw original fully
+    ctx.drawImage(origImg,0,0,W,H);
+    // Overlay thermal at moderate opacity using 'multiply'-like blend
+    ctx.globalAlpha=intensity*0.60;
+    ctx.globalCompositeOperation='source-over';
+    ctx.drawImage(offH,0,0);
+    ctx.globalAlpha=1;
+    ctx.globalCompositeOperation='source-over';
+  }
+}
+
+// Full-spectrum thermal: deep blue→cyan→green→yellow→orange→red→white
+function thermalColor(t){
+  // Ensure cool end is deep blue (not transparent)
+  const stops=[
+    [0,    10,  10, 180],
+    [0.12,  0,  40, 255],
+    [0.28,  0, 180, 255],
+    [0.45,  0, 240,  80],
+    [0.6,  200,240,   0],
+    [0.74, 255,150,   0],
+    [0.87, 255, 40,   0],
+    [1,    255,255, 220],
+  ];
+  for(let i=1;i<stops.length;i++){
+    if(t<=stops[i][0]){
+      const p=(t-stops[i-1][0])/(stops[i][0]-stops[i-1][0]);
+      return{
+        r:Math.round(stops[i-1][1]+(stops[i][1]-stops[i-1][1])*p),
+        g:Math.round(stops[i-1][2]+(stops[i][2]-stops[i-1][2])*p),
+        b:Math.round(stops[i-1][3]+(stops[i][3]-stops[i-1][3])*p),
+      };
+    }
+  }
+  return{r:255,g:255,b:220};
+}
+
+// ── ELA ───────────────────────────────────────────────────
+async function computeELA(img,W,H){
+  const c1=document.createElement('canvas'); c1.width=W; c1.height=H;
+  const x1=c1.getContext('2d'); x1.drawImage(img,0,0,W,H);
+  const orig=x1.getImageData(0,0,W,H);
+  const url=c1.toDataURL('image/jpeg',0.65);
+  const ri=await loadImg(url);
+  const c2=document.createElement('canvas'); c2.width=W; c2.height=H;
+  const x2=c2.getContext('2d'); x2.drawImage(ri,0,0,W,H);
+  const rc=x2.getImageData(0,0,W,H);
+  const out=new ImageData(W,H);
+  for(let i=0;i<orig.data.length;i+=4){
+    const d=(Math.abs(orig.data[i]-rc.data[i])+Math.abs(orig.data[i+1]-rc.data[i+1])+Math.abs(orig.data[i+2]-rc.data[i+2]))/3;
+    const v=Math.min(255,d*14);
+    out.data[i]=v; out.data[i+1]=v; out.data[i+2]=v; out.data[i+3]=255;
+  }
+  return out;
+}
+
+// ── Noise ─────────────────────────────────────────────────
+async function computeNoise(img,W,H){
+  const c=document.createElement('canvas'); c.width=W; c.height=H;
+  c.getContext('2d').drawImage(img,0,0,W,H);
+  const src=c.getContext('2d').getImageData(0,0,W,H).data;
+  const blr=boxBlur(src,W,H,2);
+  const out=new ImageData(W,H);
+  for(let i=0;i<src.length;i+=4){
+    const d=(Math.abs(src[i]-blr[i])+Math.abs(src[i+1]-blr[i+1])+Math.abs(src[i+2]-blr[i+2]))/3;
+    const v=Math.min(255,d*6);
+    out.data[i]=v; out.data[i+1]=v; out.data[i+2]=v; out.data[i+3]=255;
+  }
+  return out;
+}
+function boxBlur(src,W,H,r){
+  const o=new Uint8ClampedArray(src.length);
+  for(let y=0;y<H;y++) for(let x=0;x<W;x++){
+    let sr=0,sg=0,sb=0,n=0;
+    for(let dy=-r;dy<=r;dy++) for(let dx=-r;dx<=r;dx++){
+      const nx=Math.min(W-1,Math.max(0,x+dx)),ny=Math.min(H-1,Math.max(0,y+dy));
+      const ii=(ny*W+nx)*4; sr+=src[ii]; sg+=src[ii+1]; sb+=src[ii+2]; n++;
+    }
+    const ii=(y*W+x)*4; o[ii]=sr/n; o[ii+1]=sg/n; o[ii+2]=sb/n; o[ii+3]=255;
+  }
+  return o;
+}
+
+// ── Score ─────────────────────────────────────────────────
+function scoreImage(ela,ns,W,H){
+  let eS=0,nS=0,hi=0,N=W*H;
+  for(let i=0;i<ela.data.length;i+=4){ eS+=ela.data[i]; nS+=ns.data[i]; if(ela.data[i]>65)hi++; }
+  const eA=eS/N, nA=nS/N, hR=hi/N;
+  const sc=Math.min(97,Math.max(5,Math.round(eA/255*165+nA/255*55+hR*260)));
+  const v=sc>62?'FAKE':sc>32?'PARTIAL':'REAL';
+  const sum=sc>62?
+    `ELA shows high compression inconsistency across ${Math.round(hR*100)}% of pixels. Noise residuals indicate AI generation or heavy manipulation.`:
+    sc>32?`Mixed signals — some regions show ELA anomalies consistent with compositing or AI-generated elements fused with a real photo.`:
+    `Uniform ELA and natural noise distribution. Consistent with an authentic, unedited photograph.`;
+  const eScore=Math.min(100,Math.round(eA/255*280));
+  const nScore=Math.min(100,Math.round(nA/255*360));
+  const bScore=Math.min(100,Math.round(hR*520));
+  return{
+    score:sc, verdict:v, summary:sum,
+    signals:[
+      {name:'Error Level Analysis',desc:eScore>60?'High ELA variance — editing / AI seams detected':eScore>30?'Moderate ELA anomalies present':'Uniform ELA — likely authentic',sev:eScore>60?'HIGH':eScore>30?'MEDIUM':'LOW',score:eScore},
+      {name:'Noise Residuals',desc:nScore>55?'Irregular noise pattern — lacks real sensor characteristics':nScore>25?'Some noise inconsistencies detected':'Natural sensor noise — authentic',sev:nScore>55?'HIGH':nScore>25?'MEDIUM':'LOW',score:nScore},
+      {name:'Block Anomaly Map',desc:bScore>50?'Dense anomalous JPEG blocks — composite indicator':bScore>25?'Scattered block artifacts':'Clean block structure',sev:bScore>50?'HIGH':bScore>25?'MEDIUM':'LOW',score:bScore},
+      {name:'Frequency Domain',desc:sc>62?'Abnormal high-freq components — GAN/diffusion fingerprint':sc>32?'Mild frequency irregularities':'Natural frequency spectrum',sev:sc>62?'HIGH':sc>32?'MEDIUM':'LOW',score:Math.round(sc*0.85)},
+    ]
+  };
+}
+
+// ── Render UI ─────────────────────────────────────────────
+function renderUI(r, demo){
+  const c=r.score>62?'#ff4422':r.score>32?'#ffaa00':'#00cc55';
+  $('scorePill').textContent=r.score+'%';
+  $('scorePill').style.background=c;
+  $('aiMsg').innerHTML=`<div class="ai-icon" style="background:${c}">!</div> `
+    +(r.verdict==='FAKE'?'<b style="color:#ff5533">AI detected</b>'
+    :r.verdict==='PARTIAL'?'<b style="color:#ffaa00">Partial AI detected</b>'
+    :'<b style="color:#00cc55">Likely authentic</b>');
+  $('aiSub').textContent=r.summary.substring(0,100)+'...';
+
+  const g=$('signalsGrid'); g.innerHTML='';
+  r.signals.forEach(s=>{
+    const c2=s.sev==='HIGH'?'#ff4422':s.sev==='MEDIUM'?'#ffaa00':'#4488ff';
+    const ic=s.sev==='HIGH'?'🔴':s.sev==='MEDIUM'?'🟡':'🔵';
+    g.innerHTML+=`<div class="sig"><div class="sig-ic">${ic}</div><div class="sig-body">
+      <div class="sig-name" style="color:${c2}">${s.name}</div>
+      <div class="sig-desc">${s.desc}</div>
+      <div class="sig-bar"><div class="sig-fill" style="width:0%;background:${c2}" data-w="${s.score}"></div></div>
+    </div></div>`;
+  });
+  setTimeout(()=>g.querySelectorAll('.sig-fill').forEach(e=>e.style.width=e.dataset.w+'%'),80);
+}
+
+// ── Demo ──────────────────────────────────────────────────
+async function makeDemo(){
+  const c=document.createElement('canvas'); c.width=700; c.height=440;
+  const ctx=c.getContext('2d');
+  // BG
+  ctx.fillStyle='#12131a'; ctx.fillRect(0,0,700,440);
+  // LEFT — real photo zone
+  ctx.fillStyle='#1e2030'; ctx.fillRect(0,0,340,440);
+  // Face
+  ctx.fillStyle='#c09070'; ctx.beginPath(); ctx.ellipse(185,195,75,92,0,0,Math.PI*2); ctx.fill();
+  ctx.fillStyle='#a07855'; ctx.beginPath(); ctx.ellipse(185,330,52,75,0,0,Math.PI); ctx.fill();
+  ctx.fillStyle='#1a1a2e'; ctx.beginPath(); ctx.ellipse(162,183,11,8,0,0,Math.PI*2); ctx.fill();
+  ctx.beginPath(); ctx.ellipse(208,183,11,8,0,0,Math.PI*2); ctx.fill();
+  // Camera noise on left — organic
+  for(let i=0;i<18000;i++){ const x=Math.random()*340,y=Math.random()*440,v=Math.floor(Math.random()*50-25); ctx.fillStyle=`rgba(${128+v},${120+v},${110+v},0.1)`; ctx.fillRect(x,y,1,1); }
+  // RIGHT — AI generated zone (smooth, no noise)
+  const gr=ctx.createRadialGradient(520,210,0,520,210,250);
+  gr.addColorStop(0,'#5a0010'); gr.addColorStop(0.45,'#280040'); gr.addColorStop(1,'#060810');
+  ctx.fillStyle=gr; ctx.fillRect(320,0,380,440);
+  ctx.fillStyle='rgba(170,70,55,0.6)'; ctx.beginPath(); ctx.ellipse(530,195,78,95,0.15,0,Math.PI*2); ctx.fill();
+  ctx.fillStyle='rgba(90,35,25,0.45)'; ctx.beginPath(); ctx.ellipse(530,330,46,68,-0.1,0,Math.PI); ctx.fill();
+  ctx.fillStyle='rgba(255,55,0,0.65)'; ctx.beginPath(); ctx.ellipse(505,182,10,15,0,0,Math.PI*2); ctx.fill();
+  ctx.beginPath(); ctx.ellipse(555,182,10,15,0,0,Math.PI*2); ctx.fill();
+  ctx.fillStyle='rgba(150,95,15,0.55)'; ctx.beginPath(); ctx.ellipse(590,360,28,58,0.35,0,Math.PI*2); ctx.fill();
+  return loadImg(c.toDataURL('image/jpeg',0.9));
+}
+</script>
+</body>
+</html>

@@ -26,9 +26,14 @@ class Settings(BaseSettings):
 
     # ── AI APIs ──
     ANTHROPIC_API_KEY: str = ""
-    HF_API_TOKEN: str = "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"
-    HUGGINGFACE_API_KEY: str = ""
+    HF_API_TOKEN: str = "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"
+    HUGGINGFACE_API_KEY: str = "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"
     GROQ_API_KEY: str = ""
+    GOOGLE_API_KEY: str = ""
+
+    # ── LM Studio (local inference) ──
+    LMSTUDIO_BASE_URL: str = "http://127.0.0.1:1234/v1"
+    LMSTUDIO_MODEL: str = "qwen/qwen3.5-9b"  # exact model ID from LM Studio API
 
     # ── Telegram ──
     TELEGRAM_BOT_TOKEN: str = ""
@@ -73,6 +78,8 @@ settings = Settings()
 # Inject into os.environ so modules that read os.getenv() directly can see them
 if settings.HF_API_TOKEN:
     os.environ.setdefault("HF_API_TOKEN", settings.HF_API_TOKEN)
+    # HuggingFace Hub uses HUGGINGFACE_HUB_TOKEN for authentication
+    os.environ.setdefault("HUGGINGFACE_HUB_TOKEN", settings.HF_API_TOKEN)
 if settings.HUGGINGFACE_API_KEY:
     os.environ.setdefault("HUGGINGFACE_API_KEY", settings.HUGGINGFACE_API_KEY)
 elif settings.HF_API_TOKEN:

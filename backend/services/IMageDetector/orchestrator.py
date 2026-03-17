@@ -6,134 +6,202 @@ from fastapi import UploadFile
 import tempfile
 
 from .metadata import metadata_extractor           # Layer 2
-from .preprocessor import preprocessor             # Layer 3
+from .preprocessor import preprocessor             # Layer 3 (legacy ELA, kept as fallback)
 from .visual_forensics import visual_forensics     # Layer 4 (PIL heuristics + CNN ensemble)
-from .frequency_face import face_geometry          # Layer 5 (PIL symmetry/skin-tone heuristics)
-from .frequency_face import frequency_analyzer     # Layer 6 (PIL frequency heuristics + FFT)
+from .frequency_face import face_geometry          # Layer 5
+from .frequency_face import frequency_analyzer     # Layer 6
 from .semantic_context import semantic_analyzer    # Layer 7
 from .fusion import fusion_learner                 # Layer 8
 from .decision_explainer import decision_explainer # Layers 9 & 10
-from .claude_vision import claude_analyzer         # Phase 4
-from .diffusion_fingerprint import diffusion_analyzer # Phase 5
+from .diffusion_fingerprint import diffusion_analyzer  # Phase 5
+
+# ── Reference Heatmap Detector (primary source for heatmaps + ML) ─────
+from .heatmap_detector import heatmap_detector, parse_ai_score
+
 
 class ImageOrchestrator:
     def __init__(self):
         self.ready = False
 
     async def load_models(self):
-        """Pre-load ML models for the 10 layers."""
+        """Pre-load ML models for all layers including the reference HF models."""
         try:
+            # Load reference HF models (umm-maybe/AI-image-detector + Organika/sdxl-detector)
+            import asyncio
+            await asyncio.to_thread(heatmap_detector.load_models)
+
             await visual_forensics.load_model()
             await semantic_analyzer.load_model()
             await fusion_learner.load_model()
-            await claude_analyzer.load_model()
             await diffusion_analyzer.load_model()
-            
+
             self.ready = True
-            logger.info("ImageOrchestrator 10-Layer models loaded successfully")
+            logger.info("ImageOrchestrator models loaded (reference HF + 10-layer pipeline)")
         except Exception as e:
             logger.error(f"ImageOrchestrator model initialization failed: {e}")
 
     async def process_image(self, file: UploadFile, context_caption: str = None) -> dict:
-        """Process an image through the 10-layer forensic architecture."""
+        """
+        Process an image through:
+          1. Reference HF models (umm-maybe + Organika/sdxl-detector) → primary AI score
+          2. JET thermal ELA heatmap + noise map (exact reference math)
+          3. Supplementary 10-layer pipeline (metadata, geometry, frequency, etc.)
+          4. Final AACS fusion
+        """
         try:
-            # Setup temp file for ML layers that require path (e.g. MediaPipe, OpenCV)
             content = await file.read()
+            pil_img = Image.open(io.BytesIO(content)).convert('RGB')
+
+            # Write temp file for layers that need a path (OpenCV / MediaPipe)
             with tempfile.NamedTemporaryFile(delete=False, suffix=".jpg") as tmp:
-                img = Image.open(io.BytesIO(content)).convert('RGB')
-                img.save(tmp.name, format="JPEG")
+                pil_img.save(tmp.name, format="JPEG", quality=95)
                 tmp_path = tmp.name
 
             details = {}
-                
-            # Layer 2: Metadata
+
+            # ── Layer 2: Metadata ─────────────────────────────────────
             meta_result = metadata_extractor.extract_metadata(tmp_path)
-            score_cvs = meta_result["score_cvs"]
+            score_cvs   = meta_result["score_cvs"]
             details["Metadata"] = meta_result["anomalies"]
-            
-            # Layer 3: Preprocessing
+
+            # ── Reference heatmap detection (PRIMARY) ─────────────────
+            # Runs umm-maybe/AI-image-detector + Organika/sdxl-detector
+            # + exact ELA (quality=65, amplify×14) + noise map from reference
+            ref_result = {}
+            ela_thermal_b64 = ""
+            noise_map_b64   = ""
+            ela_score       = 0
+            noise_score     = 0
+            ref_ai_score    = None  # None means models not loaded yet
+
+            try:
+                ref_result      = heatmap_detector.detect(pil_img)
+                ela_thermal_b64 = ref_result.get("ela_heatmap",   "") or ""
+                noise_map_b64   = ref_result.get("noise_heatmap", "") or ""
+                ela_score       = ref_result.get("ela_score",     0)
+                noise_score     = ref_result.get("noise_score",   0)
+                ref_ai_score    = ref_result.get("ai_score")
+                logger.info(f"Reference HF detector: ai_score={ref_ai_score}, ela={ela_score}, noise={noise_score}")
+            except Exception as hm_err:
+                logger.warning(f"Reference heatmap detector failed: {hm_err}")
+
+            # ── Layer 3: Legacy preprocessor (fallback ELA if reference failed) ─
             prep_result = preprocessor.process(tmp_path)
-            
-            # Layer 4: Visual Forensics
+            if not ela_thermal_b64:
+                ela_thermal_b64 = prep_result.get("ela_thermal_b64") or ""
+                noise_map_b64   = prep_result.get("noise_map_b64")   or ""
+                ela_score       = prep_result.get("ela_score",  0)
+                noise_score     = prep_result.get("noise_score", 0)
+
+            # ── Layer 4: Visual Forensics ─────────────────────────────
             vis_result = visual_forensics.analyze(tmp_path)
-            score_mas = vis_result["score_mas"]
+            score_mas  = vis_result["score_mas"]
             details["VisualForensics"] = vis_result["details"]
-            
-            # Layer 4.5: Diffusion Noise Fingerprint (Phase 5)
+
+            # ── Layer 4.5: Diffusion Fingerprint ──────────────────────
             diff_result = diffusion_analyzer.analyze(tmp_path)
-            score_diff = diff_result.get("score_diffusion", 0.0)
+            score_diff  = diff_result.get("score_diffusion", 0.0)
             details.setdefault("DiffusionFingerprint", []).extend(diff_result.get("details", []))
 
-            # Layer 5: Face Geometry
+            # ── Layer 5: Face Geometry ────────────────────────────────
             geom_result = face_geometry.analyze(tmp_path)
-            score_pps = geom_result["score_pps"]
+            score_pps   = geom_result["score_pps"]
             details["FaceGeometry"] = geom_result["details"]
-            
-            # Layer 6: Frequency Forensics
+
+            # ── Layer 6: Frequency Forensics ──────────────────────────
             freq_result = frequency_analyzer.analyze(tmp_path)
-            score_freq = freq_result["score_frequency"]
+            score_freq  = freq_result["score_frequency"]
             details["FrequencyAnalysis"] = freq_result.get("details", [])
-            
-            # Layer 7: Semantic Context
+
+            # ── Layer 7: Semantic Context ─────────────────────────────
             sem_result = semantic_analyzer.analyze(tmp_path, context_caption)
-            score_irs = sem_result["score_irs"]
+            score_irs  = sem_result["score_irs"]
             details["SemanticContext"] = sem_result["details"]
 
-            # Phase 4: High-Fidelity Heatmaps (Claude Vision)
-            base64_img = prep_result.get("base64")
-            if base64_img:
-                import mimetypes
-                mime_type = mimetypes.guess_type(tmp_path)[0] or "image/jpeg"
-                claude_result = claude_analyzer.analyze(base64_img, mime_type)
-                regions = claude_result.get("regions", [])
-                
-                # Optionally append claude signals to details if needed
-                for sig in claude_result.get("signals", []):
-                    if sig.get("status") in ["detected", "warning"]:
-                        details.setdefault("ClaudeVision", []).append(f"{sig['label']}: {sig['detail']}")
-            else:
-                regions = []
+            # ── Cleanup temp file ─────────────────────────────────────
+            try:
+                os.remove(tmp_path)
+            except Exception:
+                pass
 
-            # Layer 8: Fusion
-            # NOTE: WORD_COUNT is passed to apply BBC-dataset-derived word-length correction.
-            # BBC finding: short content (<400 words) has 38% higher AI probability than long-form.
+            # ── Layer 8: Fusion ───────────────────────────────────────
             caption_word_count = len(context_caption.split()) if context_caption else None
+
+            # If reference HF models produced a score, blend it in as a strong signal.
+            # We treat ref_ai_score as an additional MAS override (0-100 scale where
+            # 100 = definitely fake, 0 = definitely real — same direction as the pipeline).
+            if ref_ai_score is not None:
+                # Blend reference AI score (70%) with existing MAS (30%)
+                effective_mas = round(ref_ai_score * 0.70 + score_mas * 0.30, 1)
+            else:
+                effective_mas = score_mas
+
             signals = {
-                "MAS": score_mas, "PPS": score_pps,
-                "FREQ": score_freq, "IRS": score_irs, "CVS": score_cvs,
+                "MAS": effective_mas,
+                "PPS": score_pps,
+                "FREQ": score_freq,
+                "IRS": score_irs,
+                "CVS": score_cvs,
                 "DIFFUSION": score_diff,
-                "WORD_COUNT": caption_word_count
+                "WORD_COUNT": caption_word_count,
             }
             deepfake_chance_aacs = fusion_learner.fuse(signals)
 
-            # Layer 9 & 10: Explainability and Decision
-            verdict = decision_explainer.decide(deepfake_chance_aacs)
+            # If reference produced a result, allow it to anchor the final score:
+            # final = 60% fused AACS + 40% reference ai_score
+            if ref_ai_score is not None:
+                deepfake_chance_aacs = round(deepfake_chance_aacs * 0.60 + ref_ai_score * 0.40, 1)
+
+            # ── Layers 9 & 10: Decision + Explanation ─────────────────
+            verdict          = decision_explainer.decide(deepfake_chance_aacs)
             explanation_text = decision_explainer.generate_explanation(signals, details)
 
-            # Cleanup
-            os.remove(tmp_path)
-            
+            # Add reference signals to explanation if available
+            ref_signals_text = ""
+            if ref_result.get("signals"):
+                ref_signals_text = " | " + " | ".join(
+                    f"{s['name']}: {s['score']}% ({s['severity']})"
+                    for s in ref_result["signals"]
+                )
+            if ref_signals_text:
+                explanation_text = explanation_text + ref_signals_text
+
+            # ── Build result ──────────────────────────────────────────
             result = {
-                "score": round(deepfake_chance_aacs, 1),
+                "score":   round(deepfake_chance_aacs, 1),
                 "verdict": verdict,
                 "signals": {
-                    "metadata_cvs": score_cvs,
-                    "visual_forensics_mas": score_mas,
-                    "face_geometry_pps": score_pps,
-                    "frequency": score_freq,
+                    "metadata_cvs":       score_cvs,
+                    "visual_forensics_mas": effective_mas,
+                    "face_geometry_pps":  score_pps,
+                    "frequency":          score_freq,
                     "semantic_context_irs": score_irs,
-                    "diffusion_fingerprint": score_diff
+                    "diffusion_fingerprint": score_diff,
+                    # Reference scores (direct from HF models + forensics)
+                    "ref_ai_score":    ref_ai_score,
+                    "ref_ela_score":   ela_score,
+                    "ref_noise_score": noise_score,
                 },
                 "explainability": {
-                    "text": explanation_text,
+                    "text":               explanation_text,
+                    # Legacy key (PIL heatmap JPEG) — kept for backward compat
                     "ela_base64_heatmap_prefix": "data:image/jpeg;base64," + (prep_result.get("ela_base64") or ""),
-                    "regions": regions
-                }
+                    # Reference-quality JET thermal heatmaps (PNG)
+                    "ela_thermal_b64": ("data:image/png;base64," + ela_thermal_b64) if ela_thermal_b64 else "",
+                    "noise_map_b64":   ("data:image/png;base64," + noise_map_b64)   if noise_map_b64   else "",
+                    "ela_score":   ela_score,
+                    "noise_score": noise_score,
+                    "regions":     [],
+                    # Full reference ML breakdown
+                    "ref_ml_results": ref_result.get("ml_results", {}),
+                    "ref_signals":    ref_result.get("signals", []),
+                },
             }
             return result
-            
+
         except Exception as e:
             logger.error(f"Image analysis failed: {e}")
             raise e
+
 
 image_orchestrator = ImageOrchestrator()

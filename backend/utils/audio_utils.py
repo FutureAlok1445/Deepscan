@@ -88,7 +88,7 @@ def load_audio(file_path: str, sr: int = 16000) -> tuple:
             tempfile.gettempdir(), f"deepscan_audio_{os.getpid()}.wav"
         )
         try:
-            subprocess.run(
+            res = subprocess.run(
                 [
                     "ffmpeg", "-y", "-i", file_path,
                     "-vn",                        # strip video
@@ -98,16 +98,32 @@ def load_audio(file_path: str, sr: int = 16000) -> tuple:
                     tmp_wav,
                 ],
                 check=True,
-                stdout=subprocess.DEVNULL,
-                stderr=subprocess.DEVNULL,
+                capture_output=True,
+                text=True
             )
             audio, actual_sr = sf.read(tmp_wav, dtype="float32")
             if audio.ndim > 1:
                 audio = np.mean(audio, axis=1)
             logger.debug(f"audio_utils.load_audio: ffmpeg OK  sr={actual_sr}  len={len(audio)}")
         except Exception as e:
-            logger.error(f"audio_utils.load_audio: ALL strategies failed for {file_path}: {e}")
-            raise RuntimeError(f"Cannot load audio from {file_path}: {e}")
+            msg = str(e)
+            stderr = getattr(e, "stderr", "")
+            if stderr:
+                logger.error(f"FFmpeg stderr: {stderr}")
+            
+            if "[WinError 2]" in msg or "ffmpeg" in msg.lower():
+                if isinstance(e, FileNotFoundError) or "[WinError 2]" in msg:
+                    msg = "FFmpeg not found. Please install FFmpeg and add it to your system PATH."
+                elif "Output file does not contain any stream" in stderr:
+                    msg = "The file does not contain an audio stream."
+                else:
+                    ret = getattr(e, 'returncode', 'unknown')
+                    msg = f"FFmpeg extraction failed (exit code {ret})."
+                    if stderr:
+                        msg += f" Error: {stderr[:100]}"
+            
+            logger.error(f"audio_utils.load_audio: ALL strategies failed for {file_path}: {msg}")
+            raise RuntimeError(f"Cannot load audio from {file_path}: {msg}")
         finally:
             if os.path.exists(tmp_wav):
                 try:

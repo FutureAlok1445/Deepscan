@@ -17,7 +17,9 @@ async def narrate(aacs_score: float, findings: list, language: str = "hi") -> st
     prompt = (
         f"You are DeepScan AI, a deepfake forensics expert. "
         f"Summarize these detection results in 3 simple sentences in {lang_name}. "
-        f"Be direct and clear about whether the media appears real or fake.\n\n"
+        f"Be direct and clear about whether the media appears real or fake. "
+        f"Crucially, the AACS score represents Fake Probability: "
+        f"Low scores (0-30) are REAL/AUTHENTIC, medium scores (31-60) are UNCERTAIN, and high scores (61-100) are FAKE/SYNTHETIC.\n\n"
         f"AACS Score: {aacs_score:.1f}/100\n"
         f"Findings: {json.dumps(findings[:5])}"
     )

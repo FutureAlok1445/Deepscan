@@ -19,8 +19,10 @@ xgboost==2.0.3
 shap==0.45.1
 librosa==0.10.1
 # torch & torchvision installed in Dockerfile with CPU-only build
-# torch==2.2.2
-# torchvision==0.17.2
+torch==2.2.2
+torchvision==0.17.2
+timm==1.0.9
+mesonet==1.1.2  # MesoNet4 SOTA detector
 python-telegram-bot[job-queue]==21.1.1
 reportlab==4.1.0
 httpx==0.27.0

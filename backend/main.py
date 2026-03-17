@@ -75,6 +75,7 @@ async def global_exception_handler(request: Request, exc: Exception):
 
 app.include_router(analyze.router, prefix="/api/v1/analyze", tags=["Analyze"])
 app.include_router(analyze_url.router, prefix="/api/v1/analyze", tags=["Analyze URL"])
+app.include_router(analyze_image.router, prefix="/api/v1/analyze", tags=["Analyze Image"])
 app.include_router(analyze_text.router, prefix="/api/v1/analyze/text", tags=["Analyze Text"])
 app.include_router(webhook.router, prefix="/webhook", tags=["Webhook"])
 
