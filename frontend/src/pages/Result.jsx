@@ -25,7 +25,6 @@ import DetectionBreakdown from '../components/analysis/DetectionBreakdown';
 import VideoDescription from '../components/analysis/VideoDescription';
 import ShareVerdict from '../components/accessibility/ShareVerdict';
 import DownloadReport from '../components/accessibility/DownloadReport';
-import ArbitrationSystem from '../components/analysis/ArbitrationSystem';
 import ElaHeatmapViewer from '../components/analysis/ElaHeatmapViewer';
 
 export default function Result() {
@@ -112,12 +111,9 @@ export default function Result() {
           <BrutalCard className="flex flex-col items-center justify-center lg:col-span-1 score-display">
             <TrustScoreGauge score={score} size={typeof window !== 'undefined' && window.innerWidth < 640 ? 160 : 220} />
             <div className="mt-4 text-center">
-              <BrutalBadge
-                variant={score >= 70 ? 'red' : score >= 40 ? 'yellow' : 'green'}
-                pulse
-              >
-                {verdict.emoji} {verdict.label}
-              </BrutalBadge>
+              <span className="px-3 py-1 text-white rounded font-mono font-bold text-xs uppercase tracking-widest" style={{ background: score >= 70 ? 'rgb(255, 68, 34)' : score >= 40 ? '#ffd700' : '#39ff14', color: score >= 40 && score < 70 ? '#000' : '#fff' }}>
+                {verdict.emoji} {verdict.label} — {formatScore(score)}
+              </span>
             </div>
           </BrutalCard>
 
@@ -163,23 +159,13 @@ export default function Result() {
           </BrutalCard>
         </div>
 
-        {/* --- Image Advanced Analysis Block (Side-by-Side on XL) --- */}
-        {result.file_type && result.file_type.includes('image') && (
-          <div className="grid grid-cols-1 xl:grid-cols-2 gap-6 result-section items-start">
-            {result.forensics?.ela && (
-              <div className="w-full">
-                <ElaHeatmapViewer
-                  elaData={result.forensics.ela}
-                  imageFile={originalFile}
-                />
-              </div>
-            )}
-            <div className="w-full">
-              <ArbitrationSystem
-                imageFile={originalFile}
-                backendScore={score}
-              />
-            </div>
+        {/* --- Image Advanced Analysis Block --- */}
+        {result.file_type && result.file_type.includes('image') && result.forensics?.ela && (
+          <div className="result-section w-full">
+            <ElaHeatmapViewer
+              elaData={result.forensics.ela}
+              imageFile={originalFile}
+            />
           </div>
         )}
 
