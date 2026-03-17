@@ -1,0 +1,430 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>AI Image Detector</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=Syne:wght@400;700;800&display=swap');
+  *{margin:0;padding:0;box-sizing:border-box}
+  :root{--bg:#0e1117;--bg2:#161b24;--bg3:#1e2535;--border:#242d3d;--acc:#ff6622;--acc2:#ffd200;--text:#e2e8f4;--muted:#4a5a78;--green:#00cc66;--red:#ff4422;--yellow:#ffaa00;--blue:#00aaff;--purple:#a060ff}
+  body{background:var(--bg);color:var(--text);font-family:'Syne',sans-serif;min-height:100vh}
+
+  /* Grid bg */
+  body::before{content:'';position:fixed;inset:0;background-image:linear-gradient(var(--border) 1px,transparent 1px),linear-gradient(90deg,var(--border) 1px,transparent 1px);background-size:48px 48px;opacity:.3;pointer-events:none;z-index:0}
+
+  header{position:sticky;top:0;z-index:100;display:flex;align-items:center;justify-content:space-between;padding:14px 28px;background:rgba(14,17,23,0.95);border-bottom:1px solid var(--border);backdrop-filter:blur(12px)}
+  .logo{display:flex;align-items:center;gap:9px;font-size:1.1rem;font-weight:800}
+  .logo-dot{width:8px;height:8px;border-radius:50%;background:var(--red);animation:pulse 2s infinite}
+  @keyframes pulse{0%,100%{opacity:1;transform:scale(1)}50%{opacity:.4;transform:scale(1.5)}}
+  .logo em{color:var(--acc);font-style:normal}
+  .hdr-tags{display:flex;gap:6px}
+  .tag{font-size:.58rem;font-family:'Space Mono',monospace;padding:3px 8px;border-radius:3px;letter-spacing:.5px}
+  .tag-ml{background:rgba(0,170,255,.08);border:1px solid rgba(0,170,255,.25);color:var(--blue)}
+  .tag-ela{background:rgba(255,102,34,.08);border:1px solid rgba(255,102,34,.25);color:var(--acc)}
+  .tag-local{background:rgba(0,204,102,.08);border:1px solid rgba(0,204,102,.25);color:var(--green)}
+
+  .page{max-width:880px;margin:0 auto;padding:30px 20px;position:relative;z-index:1}
+  h1{font-size:clamp(1.6rem,4vw,2.6rem);font-weight:800;letter-spacing:-1px;line-height:1.05;margin-bottom:5px}
+  h1 em{color:var(--acc);font-style:normal}
+  .subtitle{color:var(--muted);font-size:.72rem;font-family:'Space Mono',monospace;margin-bottom:22px}
+
+  /* Server status bar */
+  .server-bar{display:flex;align-items:center;gap:10px;padding:10px 14px;background:var(--bg2);border:1px solid var(--border);border-radius:9px;margin-bottom:16px;font-size:.7rem;font-family:'Space Mono',monospace}
+  .srv-dot{width:8px;height:8px;border-radius:50%;flex-shrink:0;transition:background .3s}
+  .srv-dot.ok{background:var(--green);box-shadow:0 0 6px var(--green)}
+  .srv-dot.err{background:var(--red)}
+  .srv-dot.spin-dot{background:var(--yellow);animation:pulse 1s infinite}
+  .srv-msg{flex:1;color:var(--muted)}
+  .srv-msg strong{color:var(--text)}
+  .srv-check{padding:5px 12px;border:1px solid var(--border);border-radius:5px;background:transparent;color:var(--muted);font-size:.64rem;font-family:'Space Mono',monospace;cursor:pointer;transition:all .2s}
+  .srv-check:hover{border-color:var(--acc);color:var(--acc)}
+
+  /* Upload */
+  .upload-card{background:var(--bg2);border:2px dashed var(--border);border-radius:13px;padding:22px;margin-bottom:13px;transition:border-color .3s}
+  .upload-card.has-file{border-color:rgba(255,102,34,.4);border-style:solid}
+  .card-lbl{font-size:.62rem;color:var(--muted);font-family:'Space Mono',monospace;text-transform:uppercase;letter-spacing:1px;margin-bottom:10px}
+  .file-row{display:flex;align-items:center;gap:9px;flex-wrap:wrap}
+  #fileInput{display:none}
+  .pick-btn{display:inline-flex;align-items:center;gap:6px;padding:9px 16px;background:rgba(255,102,34,.1);border:1px solid rgba(255,102,34,.35);border-radius:7px;color:var(--acc);font-size:.76rem;font-weight:700;font-family:'Syne',sans-serif;cursor:pointer;transition:all .2s}
+  .pick-btn:hover{background:rgba(255,102,34,.2)}
+  .pick-btn:disabled{opacity:.4;cursor:not-allowed}
+  .fname{font-size:.68rem;font-family:'Space Mono',monospace;color:var(--muted);flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .clr-btn{background:none;border:none;color:var(--muted);cursor:pointer;font-size:.85rem;padding:3px;display:none;transition:color .2s}
+  .clr-btn.show{display:block}
+  .clr-btn:hover{color:var(--red)}
+  .thumb-row{display:none;margin-top:10px;align-items:center;gap:10px}
+  .thumb-row.show{display:flex}
+  #thumbImg{height:60px;border-radius:6px;object-fit:cover;border:1px solid var(--border)}
+  .tmeta{font-size:.62rem;font-family:'Space Mono',monospace;color:var(--muted)}
+
+  .btn-row{display:flex;gap:9px;margin-bottom:3px}
+  .go-btn{flex:1;padding:14px;background:linear-gradient(135deg,var(--acc),#cc2200);border:none;border-radius:10px;color:#fff;font-size:.88rem;font-weight:800;font-family:'Syne',sans-serif;cursor:pointer;transition:all .28s;letter-spacing:.3px}
+  .go-btn:hover:not(:disabled){transform:translateY(-2px);box-shadow:0 10px 28px rgba(255,80,0,.35)}
+  .go-btn:disabled{opacity:.4;cursor:not-allowed;transform:none}
+
+  /* Error box */
+  .err-box{display:none;margin-top:10px;padding:13px 15px;background:rgba(255,60,60,.06);border:1px solid rgba(255,60,60,.2);border-radius:9px}
+  .err-box.show{display:block}
+  .err-t{color:var(--red);font-size:.76rem;font-weight:700;margin-bottom:5px}
+  .err-d{color:#cc4422;font-size:.68rem;font-family:'Space Mono',monospace;white-space:pre-wrap;word-break:break-all}
+
+  /* Loader */
+  .loader{display:none;text-align:center;padding:30px}
+  .loader.show{display:block}
+  .spin-ring{width:44px;height:44px;border:2px solid rgba(255,102,34,.12);border-top-color:var(--acc);border-radius:50%;animation:spin .85s linear infinite;margin:0 auto 13px}
+  @keyframes spin{to{transform:rotate(360deg)}}
+  .loader p{font-size:.7rem;font-family:'Space Mono',monospace;color:var(--muted)}
+  .step-txt{color:var(--acc);font-size:.64rem;margin-top:5px;min-height:16px}
+  .prog{width:220px;height:2px;background:var(--bg3);border-radius:2px;margin:9px auto 0}
+  .prog-fill{height:100%;background:linear-gradient(90deg,var(--acc),#ffaa00);border-radius:2px;transition:width .35s ease;width:0}
+
+  /* Result */
+  .result{display:none;margin-top:18px;background:var(--bg2);border-radius:14px;overflow:hidden;border:1px solid var(--border)}
+  .result.show{display:block}
+
+  .view-tabs{display:flex;gap:1px;background:var(--bg)}
+  .vtab{flex:1;padding:9px 4px;background:var(--bg2);font-size:.6rem;font-family:'Space Mono',monospace;color:var(--muted);border:none;cursor:pointer;transition:all .2s;text-align:center}
+  .vtab:hover{background:var(--bg3);color:#aaa}
+  .vtab.active{background:var(--bg3);color:var(--acc);border-bottom:2px solid var(--acc)}
+  .ctrl-row{display:flex;align-items:center;gap:10px;padding:7px 16px;background:var(--bg);border-bottom:1px solid var(--border);flex-wrap:wrap}
+  .ctrl-row label{font-size:.58rem;font-family:'Space Mono',monospace;color:var(--muted)}
+  #slider{width:88px;accent-color:var(--acc);cursor:pointer}
+  .sv{font-size:.58rem;font-family:'Space Mono',monospace;color:var(--acc);min-width:26px}
+
+  .img-box{position:relative;background:#000;line-height:0}
+  #mainCanvas{display:block;width:100%;height:auto}
+
+  /* Bottom bar */
+  .bottom-bar{background:var(--bg3);padding:13px 18px;display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;border-top:1px solid var(--border)}
+  .ai-left{display:flex;flex-direction:column;gap:4px}
+  .ai-msg{display:flex;align-items:center;gap:8px;font-size:.82rem;font-weight:700}
+  .ai-dot-ui{width:18px;height:18px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:.6rem;font-weight:700;flex-shrink:0}
+  .ai-sub{font-size:.64rem;color:var(--muted);font-family:'Space Mono',monospace}
+  .score-pill{padding:4px 12px;border-radius:5px;font-size:.8rem;font-weight:700;font-family:'Space Mono',monospace}
+  .report-btn{display:flex;align-items:center;gap:7px;padding:9px 18px;border:1.5px solid var(--border);border-radius:7px;background:transparent;color:var(--text);font-size:.76rem;font-weight:700;font-family:'Syne',sans-serif;cursor:pointer;transition:all .2s;flex-shrink:0}
+  .report-btn:hover{background:rgba(255,255,255,.04);border-color:#6a7090}
+
+  /* ML model bars */
+  .ml-section{padding:14px 16px;border-bottom:1px solid var(--border)}
+  .section-title{font-size:.6rem;font-family:'Space Mono',monospace;color:var(--muted);text-transform:uppercase;letter-spacing:1px;margin-bottom:10px;display:flex;align-items:center;gap:6px}
+  .ml-bars{display:flex;flex-direction:column;gap:9px}
+  .ml-bar-row{display:flex;align-items:center;gap:10px}
+  .ml-lbl{font-size:.64rem;font-family:'Space Mono',monospace;color:#6a7a98;width:90px;flex-shrink:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .ml-track{flex:1;height:9px;background:var(--bg);border-radius:5px;overflow:hidden}
+  .ml-fill{height:100%;border-radius:5px;transition:width 1.4s cubic-bezier(0.4,0,0.2,1)}
+  .ml-pct{font-size:.64rem;font-family:'Space Mono',monospace;width:36px;text-align:right}
+
+  /* Signals */
+  .sig-section{padding:12px 14px 16px}
+  .sigs{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+  @media(max-width:520px){.sigs{grid-template-columns:1fr}}
+  .sig{background:var(--bg);border:1px solid var(--border);border-radius:9px;padding:11px 12px;display:flex;gap:8px;transition:border-color .2s}
+  .sig:hover{border-color:rgba(255,255,255,.12)}
+  .sig-ic{font-size:.85rem;margin-top:1px;flex-shrink:0}
+  .sig-body{flex:1;min-width:0}
+  .sig-name{font-size:.68rem;font-weight:700;margin-bottom:3px}
+  .sig-desc{font-size:.61rem;color:var(--muted);font-family:'Space Mono',monospace;line-height:1.45}
+  .sig-bar{height:2px;background:var(--border);border-radius:2px;margin-top:7px}
+  .sig-fill{height:100%;border-radius:2px;transition:width 1.3s ease}
+
+  /* Instructions card */
+  .how-card{background:var(--bg2);border:1px solid rgba(0,170,255,.15);border-radius:11px;padding:16px;margin-bottom:16px}
+  .how-title{font-size:.7rem;font-weight:700;color:var(--blue);margin-bottom:10px;display:flex;align-items:center;gap:6px}
+  .steps{display:flex;flex-direction:column;gap:7px}
+  .step-row{display:flex;align-items:flex-start;gap:10px}
+  .step-num{width:20px;height:20px;border-radius:50%;background:rgba(0,170,255,.15);border:1px solid rgba(0,170,255,.3);color:var(--blue);font-size:.62rem;font-weight:700;display:flex;align-items:center;justify-content:center;flex-shrink:0;margin-top:1px}
+  .step-text{font-size:.65rem;font-family:'Space Mono',monospace;color:var(--muted);line-height:1.55}
+  .step-text strong{color:var(--text)}
+  code{background:var(--bg3);padding:2px 6px;border-radius:3px;font-size:.62rem;color:var(--acc2)}
+</style>
+</head>
+<body>
+
+<header>
+  <div class="logo"><div class="logo-dot"></div>DETECT<em>AI</em></div>
+  <div class="hdr-tags">
+    <span class="tag tag-ml">ML MODEL</span>
+    <span class="tag tag-ela">ELA HEATMAP</span>
+    <span class="tag tag-local">LOCAL BACKEND</span>
+  </div>
+</header>
+
+<main class="page">
+  <h1>AI IMAGE <em>DETECTOR</em></h1>
+  <p class="subtitle">// real ML model · works on fully AI-generated images · ELA heatmap overlay</p>
+
+  <!-- How to run -->
+  <div class="how-card">
+    <div class="how-title">🚀 HOW TO RUN (one time setup)</div>
+    <div class="steps">
+      <div class="step-row"><div class="step-num">1</div><div class="step-text"><strong>Install dependencies:</strong><br><code>pip install fastapi uvicorn pillow transformers torch torchvision python-multipart opencv-python</code></div></div>
+      <div class="step-row"><div class="step-num">2</div><div class="step-text"><strong>Start the backend:</strong><br><code>python main.py</code> — first run downloads ~500MB model, then runs at localhost:8000</div></div>
+      <div class="step-row"><div class="step-num">3</div><div class="step-text"><strong>Open this file</strong> in your browser — upload any image and click Analyze</div></div>
+    </div>
+  </div>
+
+  <!-- Server status -->
+  <div class="server-bar">
+    <div class="srv-dot spin-dot" id="srvDot"></div>
+    <div class="srv-msg" id="srvMsg">Checking backend at <strong>localhost:8000</strong>...</div>
+    <button class="srv-check" id="srvCheck">↺ Recheck</button>
+  </div>
+
+  <!-- Upload -->
+  <div class="upload-card" id="uploadCard">
+    <div class="card-lbl">Your Image</div>
+    <div class="file-row">
+      <button class="pick-btn" id="pickBtn">📁 Choose File</button>
+      <input type="file" id="fileInput" accept="image/*">
+      <span class="fname" id="fname">No file selected</span>
+      <button class="clr-btn" id="clrBtn">✕</button>
+    </div>
+    <div class="thumb-row" id="thumbRow">
+      <img id="thumbImg" alt="">
+      <div class="tmeta" id="tmeta"></div>
+    </div>
+  </div>
+
+  <div class="btn-row">
+    <button class="go-btn" id="goBtn" disabled>🔬 ANALYZE IMAGE</button>
+  </div>
+
+  <div class="err-box" id="errBox"><div class="err-t">❌ Error</div><div class="err-d" id="errD"></div></div>
+
+  <div class="loader" id="loader">
+    <div class="spin-ring"></div>
+    <p>Running ML analysis...</p>
+    <div class="step-txt" id="stepTxt">Initializing</div>
+    <div class="prog"><div class="prog-fill" id="progFill"></div></div>
+  </div>
+
+  <div class="result" id="result">
+    <div class="view-tabs">
+      <button class="vtab active" data-m="blend">🌡 Heatmap + Image</button>
+      <button class="vtab" data-m="heat">🔥 Heatmap Only</button>
+      <button class="vtab" data-m="noise">🔊 Noise Map</button>
+      <button class="vtab" data-m="orig">📷 Original</button>
+    </div>
+    <div class="ctrl-row">
+      <label>INTENSITY</label>
+      <input type="range" id="slider" min="10" max="100" value="65">
+      <span class="sv" id="sv">65%</span>
+    </div>
+    <div class="img-box"><canvas id="mainCanvas"></canvas></div>
+
+    <div class="bottom-bar">
+      <div class="ai-left">
+        <div class="ai-msg">
+          <div class="ai-dot-ui" id="aiDot">!</div>
+          <span id="aiMsg">—</span>
+          <span class="score-pill" id="scorePill">—%</span>
+        </div>
+        <div class="ai-sub" id="aiSub">—</div>
+      </div>
+      <button class="report-btn">📋 Report</button>
+    </div>
+
+    <!-- ML bars -->
+    <div class="ml-section">
+      <div class="section-title">🤖 ML MODEL BREAKDOWN</div>
+      <div class="ml-bars" id="mlBars"></div>
+    </div>
+
+    <!-- Signals -->
+    <div class="sig-section">
+      <div class="section-title">🔬 FORENSIC SIGNALS</div>
+      <div class="sigs" id="sigGrid"></div>
+    </div>
+  </div>
+</main>
+
+<script>
+const $=id=>document.getElementById(id);
+const API='http://localhost:8000';
+let file=null,origImg=null,elaImg=null,noiseImg=null,mode='blend';
+let W=0,H=0;
+
+// ── Server check ──────────────────────────────────────────
+async function checkServer(){
+  $('srvDot').className='srv-dot spin-dot';
+  $('srvMsg').innerHTML='Checking backend at <strong>localhost:8000</strong>...';
+  try{
+    const r=await fetch(API+'/health',{signal:AbortSignal.timeout(4000)});
+    const d=await r.json();
+    $('srvDot').className='srv-dot ok';
+    $('srvMsg').innerHTML=`Backend <strong>online</strong> · Models: ${d.models_loaded.join(', ')||'loading...'} · CUDA: ${d.cuda?'✓':'CPU'}`;
+  }catch(e){
+    $('srvDot').className='srv-dot err';
+    $('srvMsg').innerHTML='Backend <strong>offline</strong> · Run <code style="background:#1e2535;padding:2px 5px;border-radius:3px">python main.py</code> first';
+  }
+}
+checkServer();
+$('srvCheck').onclick=checkServer;
+
+// ── File ──────────────────────────────────────────────────
+$('pickBtn').onclick=()=>$('fileInput').click();
+$('fileInput').onchange=e=>{if(e.target.files[0])setFile(e.target.files[0]);};
+$('clrBtn').onclick=reset;
+
+function setFile(f){
+  file=f;$('fname').textContent=f.name;$('clrBtn').classList.add('show');
+  $('thumbImg').src=URL.createObjectURL(f);$('tmeta').textContent=`${(f.size/1024/1024).toFixed(2)} MB · ${f.type}`;
+  $('thumbRow').classList.add('show');$('uploadCard').classList.add('has-file');
+  $('goBtn').disabled=false;$('errBox').classList.remove('show');
+}
+function reset(){
+  file=null;origImg=null;elaImg=null;noiseImg=null;
+  $('fname').textContent='No file selected';$('clrBtn').classList.remove('show');
+  $('thumbRow').classList.remove('show');$('thumbImg').src='';$('fileInput').value='';
+  $('uploadCard').classList.remove('has-file');$('goBtn').disabled=true;
+  $('result').classList.remove('show');$('errBox').classList.remove('show');
+}
+
+// ── View tabs / slider ────────────────────────────────────
+document.querySelectorAll('.vtab').forEach(b=>{
+  b.onclick=()=>{
+    document.querySelectorAll('.vtab').forEach(x=>x.classList.remove('active'));
+    b.classList.add('active');mode=b.dataset.m;if(origImg)draw();
+  };
+});
+$('slider').oninput=()=>{$('sv').textContent=$('slider').value+'%';if(origImg)draw();};
+
+// ── Run ───────────────────────────────────────────────────
+$('goBtn').onclick=run;
+
+function busy(on){$('loader').classList.toggle('show',on);$('goBtn').disabled=on;$('pickBtn').disabled=on;}
+function step(t){$('stepTxt').textContent=t;}
+function prog(v){$('progFill').style.width=v+'%';}
+function showErr(m){$('errD').textContent=m;$('errBox').classList.add('show');}
+function loadImg(src){return new Promise((res,rej)=>{const i=new Image();i.onload=()=>res(i);i.onerror=rej;i.src=src;});}
+function tick(){return new Promise(r=>setTimeout(r,30));}
+
+async function run(){
+  if(!file)return;
+  $('errBox').classList.remove('show');busy(true);$('result').classList.remove('show');prog(0);
+
+  try{
+    step('Sending image to local ML backend...');prog(10);
+
+    const form=new FormData();
+    form.append('file',file);
+
+    const resp=await fetch(API+'/detect',{method:'POST',body:form});
+    if(!resp.ok){
+      const err=await resp.text();
+      throw new Error(`Backend error ${resp.status}: ${err.slice(0,200)}`);
+    }
+    prog(70);step('Processing results...');await tick();
+
+    const data=await resp.json();
+    prog(85);step('Rendering heatmap...');await tick();
+
+    // Load original image for canvas
+    origImg=await loadImg(URL.createObjectURL(file));
+
+    // Load ELA heatmap from backend (thermal-colored PNG)
+    if(data.ela_heatmap) elaImg=await loadImg('data:image/png;base64,'+data.ela_heatmap);
+    if(data.noise_heatmap) noiseImg=await loadImg('data:image/png;base64,'+data.noise_heatmap);
+
+    const maxW=Math.min(origImg.width,840);
+    const sc=maxW/origImg.width;
+    W=Math.round(origImg.width*sc);H=Math.round(origImg.height*sc);
+    $('mainCanvas').width=W;$('mainCanvas').height=H;
+
+    prog(100);await tick();
+    draw();
+    renderUI(data);
+    busy(false);
+    $('result').classList.add('show');
+
+  }catch(e){
+    busy(false);
+    if(e.message.includes('fetch')||e.message.includes('Failed')){
+      showErr('Cannot reach backend.\n\nMake sure you ran: python main.py\n\nThen click ↺ Recheck above.');
+    } else {
+      showErr(e.message||String(e));
+    }
+    checkServer();
+  }
+}
+
+// ── Draw canvas ───────────────────────────────────────────
+function draw(){
+  const ctx=$('mainCanvas').getContext('2d');
+  ctx.clearRect(0,0,W,H);
+  const intensity=parseInt($('slider').value)/100;
+
+  if(mode==='orig'){ctx.drawImage(origImg,0,0,W,H);return;}
+  if(mode==='noise'&&noiseImg){
+    ctx.globalAlpha=.22;ctx.drawImage(origImg,0,0,W,H);ctx.globalAlpha=1;
+    ctx.globalAlpha=intensity*.9;ctx.drawImage(noiseImg,0,0,W,H);ctx.globalAlpha=1;
+    return;
+  }
+  if(!elaImg){ctx.drawImage(origImg,0,0,W,H);return;}
+
+  if(mode==='heat'){
+    ctx.globalAlpha=.22;ctx.drawImage(origImg,0,0,W,H);ctx.globalAlpha=1;
+    ctx.globalAlpha=intensity*.9;ctx.drawImage(elaImg,0,0,W,H);ctx.globalAlpha=1;
+  }else{
+    // blend: original clearly visible + heatmap on top
+    ctx.drawImage(origImg,0,0,W,H);
+    ctx.globalAlpha=intensity*.62;ctx.drawImage(elaImg,0,0,W,H);ctx.globalAlpha=1;
+  }
+}
+
+// ── Render UI ─────────────────────────────────────────────
+function renderUI(data){
+  const score=data.ai_score;
+  const verdict=data.verdict;
+  const c=score>60?'var(--red)':score>32?'var(--yellow)':'var(--green)';
+
+  $('aiDot').style.background=c;
+  $('scorePill').textContent=score+'%';
+  $('scorePill').style.background=c;
+
+  const vText=verdict==='FAKE'?'<b style="color:var(--red)">⚠ AI Generated / Manipulated</b>':
+              verdict==='PARTIAL'?'<b style="color:var(--yellow)">◈ Possibly AI / Composite</b>':
+              '<b style="color:var(--green)">✓ Likely Authentic</b>';
+  $('aiMsg').innerHTML=`<div class="ai-dot-ui" style="background:${c}">!</div>${vText}`;
+  $('aiSub').textContent=`ML model confidence: ${score}% · ELA score: ${data.ela_score}% · Noise uniformity: ${data.noise_score}%`;
+
+  // ML bars — show all label scores from model
+  const bEl=$('mlBars');bEl.innerHTML='';
+  let allLabels=[];
+  Object.entries(data.ml_results||{}).forEach(([model,preds])=>{
+    if(Array.isArray(preds)){
+      preds.flat().forEach(p=>{
+        const isAI=/ai|fake|artificial|generated|synthetic|diffusion/i.test(p.label);
+        allLabels.push({...p,model,isAI});
+      });
+    }
+  });
+  allLabels.sort((a,b)=>b.score-a.score).slice(0,6).forEach(l=>{
+    const pct=Math.round(l.score*100);
+    const bc=l.isAI?'var(--red)':'var(--green)';
+    bEl.innerHTML+=`<div class="ml-bar-row">
+      <div class="ml-lbl">${l.label}</div>
+      <div class="ml-track"><div class="ml-fill" style="width:0%;background:${bc}" data-w="${pct}"></div></div>
+      <div class="ml-pct" style="color:${bc}">${pct}%</div>
+    </div>`;
+  });
+  if(!allLabels.length) bEl.innerHTML=`<div style="font-size:.65rem;font-family:'Space Mono',monospace;color:var(--muted)">Model score: ${score}%</div>`;
+  setTimeout(()=>bEl.querySelectorAll('.ml-fill').forEach(e=>e.style.width=e.dataset.w+'%'),80);
+
+  // Signals
+  const g=$('sigGrid');g.innerHTML='';
+  (data.signals||[]).forEach(s=>{
+    const ic=s.severity==='HIGH'?'🔴':s.severity==='MEDIUM'?'🟡':'🔵';
+    const sc2=s.severity==='HIGH'?'var(--red)':s.severity==='MEDIUM'?'var(--yellow)':'var(--blue)';
+    g.innerHTML+=`<div class="sig"><div class="sig-ic">${ic}</div><div class="sig-body">
+      <div class="sig-name" style="color:${sc2}">${s.name}</div>
+      <div class="sig-desc">${s.desc}</div>
+      <div class="sig-bar"><div class="sig-fill" style="width:0%;background:${sc2}" data-w="${s.score}"></div></div>
+    </div></div>`;
+  });
+  setTimeout(()=>g.querySelectorAll('.sig-fill').forEach(e=>e.style.width=e.dataset.w+'%'),80);
+}
+</script>
+</body>
+</html>

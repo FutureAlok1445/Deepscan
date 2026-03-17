@@ -22,12 +22,12 @@ class ExplainabilityDecisionLayer:
         """Translates technical details into layman text."""
         explanation = []
 
-        # MAS: pixel manipulation (Visual Forensics)
+        # ELA / MAS: pixel manipulation (Visual Forensics)
         mas = signals.get('MAS', 50)
         if mas < 35:
-            explanation.append(f"Strong pixel-level manipulation detected (MAS={mas:.0f}/100). CNN forensics flagged synthetic textures.")
+            explanation.append(f"Strong pixel-level manipulation detected via Error Level Analysis (ELA) (MAS={mas:.0f}/100). The generated heatmap indicates computational compression differences common in digital splicing.")
         elif mas < 50:
-            explanation.append(f"Mild pixel anomalies found (MAS={mas:.0f}/100). Some visual inconsistencies present.")
+            explanation.append(f"Mild pixel anomalies found (MAS={mas:.0f}/100). The heatmap highlights slight visual inconsistencies in local regions.")
 
         # PPS: face geometry
         pps = signals.get('PPS', 50)
