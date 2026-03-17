@@ -163,87 +163,34 @@ export default function Result() {
           </BrutalCard>
         </div>
 
-        {/* --- Image ELA Heatmap Viewer (JET thermal, reference-quality) --- */}
-        {result.file_type && result.file_type.includes('image') && result.forensics?.ela && (
-          <div className="result-section">
-            <ElaHeatmapViewer
-              elaData={result.forensics.ela}
-              imageFile={originalFile}
-            />
-          </div>
-        )}
-
-        {/* --- Image Forensics (Arbitration System) --- */}
+        {/* --- Image Advanced Analysis Block (Side-by-Side on XL) --- */}
         {result.file_type && result.file_type.includes('image') && (
-          <div className="result-section">
-            <ArbitrationSystem
-              imageFile={originalFile}
-              backendScore={score}
-            />
+          <div className="grid grid-cols-1 xl:grid-cols-2 gap-6 result-section items-start">
+            {result.forensics?.ela && (
+              <div className="w-full">
+                <ElaHeatmapViewer
+                  elaData={result.forensics.ela}
+                  imageFile={originalFile}
+                />
+              </div>
+            )}
+            <div className="w-full">
+              <ArbitrationSystem
+                imageFile={originalFile}
+                backendScore={score}
+              />
+            </div>
           </div>
         )}
 
-        {/* Key Findings */}
-        {result.findings?.length > 0 && (
-          <div className="result-section"><KeyFindings findings={result.findings} /></div>
-        )}
-
-        {/* Detection Engine Breakdown — all 9 engines with score bars */}
-        {(result.findings?.length > 0 || result.ltca_data) && (
-          <div className="result-section">
-            <DetectionBreakdown
-              findings={result.findings || []}
-              ltcaData={result.ltca_data || {}}
-            />
-          </div>
-        )}
-
-        {/* AI Video Content Description */}
+        {/* --- AI Video Content Description --- */}
         {result.ltca_data?.video_description && (
           <div className="result-section">
             <VideoDescription videoDescription={result.ltca_data.video_description} />
           </div>
         )}
 
-        {/* Sub-Scores */}
-        {result.sub_scores && (
-          <div className="result-section"><SubScoreGrid subScores={result.sub_scores} /></div>
-        )}
-
-        {/* Two-column: CDCF + Narrative */}
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 result-section">
-          <CdcfPanel cdcf={result.cdcf} />
-          <NarrativeExplanation narrative={result.narrative} />
-        </div>
-
-        {/* Forensics */}
-        {result.forensics && (
-          <div className="result-section"><ForensicsViewer forensics={result.forensics} /></div>
-        )}
-
-        {/* Grad-CAM */}
-        {result.gradcam && (
-          <div className="result-section"><GradCamOverlay gradcam={result.gradcam} /></div>
-        )}
-
-        {/* Heartbeat */}
-        {result.heartbeat && (
-          <div className="result-section"><HeartbeatChart heartbeatData={result.heartbeat} /></div>
-        )}
-
-        {/* Audio */}
-        {result.audio && (
-          <div className="result-section"><AudioSpectrum audioData={result.audio} /></div>
-        )}
-
-        {/* Latent Trajectory (Physics Graph) */}
-        {result.ltca_data && result.ltca_data.trajectory_plot && result.ltca_data.trajectory_plot.length > 0 && (
-          <div className="result-section">
-            <TrajectoryPlot trajectoryData={result.ltca_data.trajectory_plot} />
-          </div>
-        )}
-
-        {/* Deep NLM Forensic Analysis */}
+        {/* --- Deep NLM Forensic Analysis --- */}
         {result.ltca_data && result.ltca_data.nlm_report && (
           <div className="result-section">
             <BrutalCard className="!p-3 sm:!p-6 bg-ds-silver/5 border-l-4 sm:border-l-8 border-l-ds-cyan">
@@ -256,6 +203,54 @@ export default function Result() {
                 ))}
               </div>
             </BrutalCard>
+          </div>
+        )}
+
+        {/* --- Secondary Metrics Grid --- */}
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 result-section items-start">
+          <div className="space-y-6 w-full flex flex-col">
+            {/* Key Findings */}
+            {result.findings?.length > 0 && <KeyFindings findings={result.findings} />}
+            {/* Sub-Scores */}
+            {result.sub_scores && <SubScoreGrid subScores={result.sub_scores} />}
+            <CdcfPanel cdcf={result.cdcf} />
+          </div>
+          <div className="space-y-6 w-full flex flex-col">
+            {/* Detection Engine Breakdown — all 9 engines with score bars */}
+            {(result.findings?.length > 0 || result.ltca_data) && (
+              <DetectionBreakdown
+                findings={result.findings || []}
+                ltcaData={result.ltca_data || {}}
+              />
+            )}
+            <NarrativeExplanation narrative={result.narrative} />
+          </div>
+        </div>
+
+        {/* --- Audio / Video Specific Blocks --- */}
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 result-section">
+          {result.heartbeat && <HeartbeatChart heartbeatData={result.heartbeat} />}
+          {result.audio && <AudioSpectrum audioData={result.audio} />}
+          {result.ltca_data && result.ltca_data.trajectory_plot && result.ltca_data.trajectory_plot.length > 0 && (
+            <div className="lg:col-span-2">
+              <TrajectoryPlot trajectoryData={result.ltca_data.trajectory_plot} />
+            </div>
+          )}
+        </div>
+
+        {/* --- Raw Forensic Data (Collapsible) --- */}
+        {(result.forensics || result.gradcam) && (
+          <div className="result-section mt-8">
+            <details className="group [&_summary::-webkit-details-marker]:hidden border-2 border-ds-silver/20 hover:border-ds-red transition-all">
+              <summary className="flex items-center justify-between cursor-pointer p-4 bg-[#111] outline-none font-mono text-xs uppercase tracking-widest text-ds-silver/70 hover:text-ds-silver">
+                <span className="flex items-center gap-2"><div className="w-2 h-2 rounded-full bg-ds-silver/40 group-open:bg-ds-red transition-colors" />View Raw Backend Forensics</span>
+                <span className="transition duration-300 group-open:rotate-180">▼</span>
+              </summary>
+              <div className="p-4 border-t-2 border-ds-silver/20 bg-[#0a0a0f] space-y-6">
+                {result.forensics && <ForensicsViewer forensics={result.forensics} />}
+                {result.gradcam && <GradCamOverlay gradcam={result.gradcam} />}
+              </div>
+            </details>
           </div>
         )}
 
