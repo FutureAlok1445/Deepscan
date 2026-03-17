@@ -377,8 +377,8 @@ export async function submitFeedback(args) {
  * @param {string} language - Language code (default 'en')
  * @returns {Promise<Object>} Analysis result
  */
-export async function analyzeText(text, language = 'en') {
-  const res = await api.post('/analyze/text', { text, language });
+export async function analyzeText(text, mode = 'ai', language = 'en') {
+  const res = await api.post('/analyze/text', { text, mode, language });
   const result = res.data;
   cacheResult(result.id, result);
   cacheHistoryItem({
