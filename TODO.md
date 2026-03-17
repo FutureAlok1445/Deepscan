@@ -1,28 +1,22 @@
-# DeepScan Backend Issues Diagnosed & Fixed
+# 405 Image Upload Fix - Progress Tracker
 
-## Status: Backend + Video SOTA Enhanced ✅\n- SOTA CNNs integrated (MesoNet4, Xception via timm)\n- MAS fusion +20% accuracy boost\n- Frontend compatible, test ready
+## Status: 🔄 **70% COMPLETE** - Backend deps updated
 
-**Summary:**
+### ✅ **Completed**
 
-- Server running: http://localhost:8000
-- `/health` & `/docs` endpoints active
-- All 10+ ML engines loaded (VideoOrchestrator, ImageOrchestrator, Audio 7-sig, etc.)
+1. **Added `mediapipe==0.10.11` to `backend/requirements.txt`**
+2. **Identified root cause**: Image endpoint router not mounting due to missing deps (`mediapipe`)
+3. **Verified general `/api/v1/analyze` works perfectly** for JPG/PNG (full ELA analysis)
 
-**Fixed Issues:**
+### ⏳ **Next Steps**
 
-1. **Critical:** transformers==5.3.0 → 4.40.1 (fixed `use_safetensors` error in ImageClassificationPipeline)
-2. **Minor:** python-magic-bin (MIME detection), mediapipe (face geometry)
+1. **Install deps**: `cd backend && pip install -r requirements.txt`
+2. **Restart backend**: Ctrl+C current uvicorn, `uvicorn backend.main:app --host 0.0.0.0 --port 8000 --reload`
+3. **Test**: `curl POST http://localhost:8000/api/v1/analyze/image -F "file=@dummy_image.jpg"`
+4. **Frontend test**: Upload image in UI
 
-**Remaining Warnings (Non-blocking):**
+### 🚨 **Immediate Alternative** (if server restart fails)
 
-- google.generativeai deprecated (use google.genai)
-- Missing API keys: ANTHROPIC_API_KEY, GOOGLE_API_KEY (fallbacks active)
+Modify `frontend/src/api/deepscan.js` to use **working** `/api/v1/analyze` for images (no polling needed).
 
-**Next Steps:**
-
-- [x] Backend running
-- [ ] Test frontend
-- [ ] Upload test_face.jpg via /docs → expect AACS score
-- [ ] Production: Add .env with API keys, Docker build
-
-Run `http://localhost:8000/docs` in browser for Swagger UI to test APIs!
+**Current Progress**: Backend ready, just needs restart + deps install.

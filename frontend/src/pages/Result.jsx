@@ -33,9 +33,6 @@ import TrajectoryPlot from '../components/analysis/TrajectoryPlot';
 import GrokNLMAnalysis from '../components/analysis/GrokNLMAnalysis';
 import DetectionBreakdown from '../components/analysis/DetectionBreakdown';
 import VideoDescription from '../components/analysis/VideoDescription';
-import ShareVerdict from '../components/accessibility/ShareVerdict';
-import DownloadReport from '../components/accessibility/DownloadReport';
-import ArbitrationSystem from '../components/analysis/ArbitrationSystem';
 import ElaHeatmapViewer from '../components/analysis/ElaHeatmapViewer';
 
 export default function Result() {
@@ -138,7 +135,7 @@ export default function Result() {
         )}
 
         {/* --- Image Forensics (Arbitration System) --- */}
-        {result.file_type && result.file_type.includes('image') && (
+        {result.file_type && result.file_type.includes('image') ? (
           <div className="result-section">
             <SimpleResult
               aacs_score={score}
