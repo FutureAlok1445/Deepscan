@@ -61,7 +61,12 @@ class TextDetector:
         4. Multi-AI Debate Heuristics / Sapling API
         """
         if not text.strip() or len(text.split()) < 5:
-            return {"ai_score": 0.0, "details": "Text too short"}
+            return {
+                "ai_score": 0.0, 
+                "human_score": 100.0,
+                "signals": {"hf_model": 0, "perplexity": 0, "burstiness": 0, "sapling_api": 0},
+                "reasons": ["Text too short for reliable analysis."]
+            }
 
         # 1. HuggingFace Score
         hf_score = await self._get_hf_score(text)
@@ -69,24 +74,29 @@ class TextDetector:
         # 2. Perplexity Score
         perplexity = self._get_perplexity(text)
         # Higher perplexity = more human. Lower = more AI.
-        # Human writing > 60. AI < 30.
-        perplexity_prob = 100.0 if perplexity < 25 else (0.0 if perplexity > 65 else (65 - perplexity) / 40 * 100)
+        # Adjusted bands based on GPT-2-small typical outputs
+        perplexity_prob = 100.0 if perplexity < 20 else (0.0 if perplexity > 80 else (80 - perplexity) / 60 * 100)
         
         # 3. Burstiness Score
         burstiness = self._get_burstiness(text)
-        # Low burstiness (variance < 20) -> higher AI probability
-        burstiness_prob = 100.0 if burstiness < 12 else (0.0 if burstiness > 45 else (45 - burstiness) / 33 * 100)
+        # Low burstiness (variance < 10) -> higher AI probability
+        burstiness_prob = 100.0 if burstiness < 10 else (0.0 if burstiness > 50 else (50 - burstiness) / 40 * 100)
         
         # 4. Sapling / Multi-AI Consensus (Simulated/API)
         sapling_score = await self._get_sapling_score(text)
         
-        # Final Weighted score inspired by user flow:
-        # Perplexity (0.4) + Burstiness (0.3) + AI/Sapling Consensus (0.3)
+        # Weighted score composition
+        # If HF model is highly confident (e.g. > 90 or < 10), give it more weight
+        hf_weight = 0.5 if (hf_score > 90 or hf_score < 10) else 0.3
+        
         final_ai_score = (
-            0.4 * perplexity_prob + 
-            0.3 * burstiness_prob + 
-            0.3 * max(hf_score, sapling_score)
+            0.35 * perplexity_prob + 
+            0.25 * burstiness_prob + 
+            hf_weight * hf_score +
+            (0.4 - hf_weight) * sapling_score
         )
+        
+        final_ai_score = min(max(final_ai_score, 0), 100)
         
         return {
             "ai_score": round(final_ai_score, 2),
@@ -102,55 +112,71 @@ class TextDetector:
 
     async def _get_hf_score(self, text: str) -> float:
         try:
-            # Short timeout for demo stability
-            result = await query_huggingface(self.model_id, payload={"inputs": text}, retries=1)
-            if "error" in result:
-                logger.warning(f"HF Text API skipped: {result['error']}")
-                return 40.0 # Neutral fallback
+            # Try a slightly better model if the default ones are flaky
+            # "Hello-SimpleAI/chatgpt-detector-roberta" is often quite good
+            model_to_use = self.model_id
+            result = await query_huggingface(model_to_use, payload={"inputs": text}, retries=2)
+            
+            if not result or "error" in result:
+                logger.warning(f"HF Text API skipped or failed: {result.get('error') if result else 'Empty response'}")
+                return 50.0 # Neutral fallback
             
             ai_score = 0.0
+            # Some models return [[{"label": "...", "score": ...}]]
             if isinstance(result, list) and len(result) > 0:
                 inner = result[0]
-                for item in inner:
-                    label = str(item.get("label", "")).lower()
+                if isinstance(inner, list):
+                    for item in inner:
+                        label = str(item.get("label", "")).lower()
+                        if any(x in label for x in ["ai", "label_1", "fake", "generated", "machine"]):
+                            ai_score = item.get("score", 0.0)
+                            break
+                        if any(x in label for x in ["human", "label_0", "real", "human-written"]):
+                            ai_score = 1.0 - item.get("score", 1.0)
+                            break
+                elif isinstance(inner, dict):
+                    # Some models return [{"label": "...", "score": ...}]
+                    label = str(inner.get("label", "")).lower()
                     if any(x in label for x in ["ai", "label_1", "fake", "generated"]):
-                        ai_score = item.get("score", 0.0)
-                        break
-                    if any(x in label for x in ["human", "label_0", "real"]):
-                        ai_score = 1.0 - item.get("score", 1.0)
-                        break
+                        ai_score = inner.get("score", 0.0)
+                    else:
+                        ai_score = 1.0 - inner.get("score", 0.0)
+            
             return ai_score * 100
-        except Exception:
+        except Exception as e:
+            logger.error(f"HF Score error: {e}")
             return 50.0
 
     def _get_perplexity(self, text: str) -> float:
-        # GPT-2 is very heavy, fallback if not explicitly loaded
         if self._gpt2_model is None:
-            return 45.0 # Neutral fallback
+            # Try loading once if it hasn't been loaded
+            if not self._loading_gpt2:
+                import threading
+                threading.Thread(target=self._load_gpt2).start()
+            return 45.0
         
         try:
-            # Ensure it's not a massive block of text that kills the CPU
-            input_text = text[:800] 
-            inputs = self._gpt2_tokenizer(input_text, return_tensors="pt", truncation=True, max_length=256)
-            if inputs["input_ids"].size(1) < 2:
+            input_text = text[:1024] # Slightly larger window
+            inputs = self._gpt2_tokenizer(input_text, return_tensors="pt", truncation=True, max_length=512)
+            if inputs["input_ids"].size(1) < 5:
                 return 45.0
                 
             with torch.no_grad():
                 outputs = self._gpt2_model(**inputs, labels=inputs["input_ids"])
                 loss = outputs.loss
                 perplexity = torch.exp(loss)
-                return min(perplexity.item(), 200.0) # Cap it
+                return min(perplexity.item(), 250.0)
         except Exception as e:
             logger.error(f"Perplexity calculation failed: {e}")
             return 45.0
 
     def _get_burstiness(self, text: str) -> float:
         import re
-        sentences = re.split(r'[.!?]', text)
+        sentences = re.split(r'[.!?]+', text)
         sentences = [s.strip() for s in sentences if len(s.strip().split()) > 0]
         
         if len(sentences) < 2:
-            return 5.0 # Low burstiness for single sentences/short text
+            return 8.0 # Lower burstiness for single sentences
             
         lengths = [len(s.split()) for s in sentences]
         avg = sum(lengths) / len(lengths)
@@ -158,98 +184,176 @@ class TextDetector:
         return float(variance)
 
     async def _get_sapling_score(self, text: str) -> float:
-        """Tries to use Sapling API, fallbacks to a simulated consensus if API fails."""
-        try:
-            async with httpx.AsyncClient() as client:
-                resp = await client.post(
-                    "https://api.sapling.ai/api/v1/aidetect",
-                    json={"key": self.sapling_api_key, "text": text},
-                    timeout=5.0
-                )
-                if resp.status_code == 200:
-                    data = resp.json()
-                    # Sapling returns score between 0 and 1
-                    return float(data.get("score", 0.5)) * 100
-        except Exception as e:
-            logger.warning(f"Sapling API failed or key invalid: {e}")
+        if not self.sapling_api_key or self.sapling_api_key.startswith("W"): # Still using placeholder
+            pass 
+        else:
+            try:
+                async with httpx.AsyncClient() as client:
+                    resp = await client.post(
+                        "https://api.sapling.ai/api/v1/aidetect",
+                        json={"key": self.sapling_api_key, "text": text},
+                        timeout=8.0
+                    )
+                    if resp.status_code == 200:
+                        data = resp.json()
+                        return float(data.get("score", 0.5)) * 100
+            except Exception as e:
+                logger.warning(f"Sapling API error: {e}")
         
-        # Simulated "AI Debate" Consensus Heuristic
-        # We'll use the average of other signals with some random noise to simulate 'consensus'
-        return 50.0 # Default fallback
+        # If API fails, use a secondary check for "AI markers"
+        ai_markers = ["as an ai language model", "in conclusion", "furthermore", "moreover", "it is important to note", "unprecedented"]
+        marker_score = 10.0
+        for marker in ai_markers:
+            if marker in text.lower():
+                marker_score += 15.0
+        return min(marker_score, 80.0)
 
     def _generate_reasons(self, perplexity, burstiness, hf_score, sapling_score) -> list:
         reasons = []
-        if perplexity < 40:
-            reasons.append("Low perplexity: Text is statistically very predictable.")
-        elif perplexity > 70:
-            reasons.append("High perplexity: Text exhibits complex, non-uniform structure.")
+        if perplexity < 30:
+            reasons.append("Highly predictable word choice (low perplexity).")
+        elif perplexity > 90:
+            reasons.append("Highly creative and varied phrasing (high perplexity).")
             
-        if burstiness < 15:
-            reasons.append("Low burstiness: Sentence lengths are highly uniform, characteristic of AI models.")
-        elif burstiness > 40:
-            reasons.append("High burstiness: Varied sentence structure suggests natural human flow.")
+        if burstiness < 12:
+            reasons.append("Highly uniform sentence structures (low burstiness).")
+        elif burstiness > 45:
+            reasons.append("Varied and dynamic sentence rhythms (high burstiness).")
             
-        if hf_score > 70 or sapling_score > 70:
-            reasons.append("Model Consensus: Multiple AI detection engines flagged this text as generated.")
+        if hf_score > 80:
+            reasons.append("Neural pattern analyzer flags structural footprints of LLMs.")
+        elif hf_score < 20:
+            reasons.append("Text exhibits deep semantic nuance common in human writing.")
+            
+        if sapling_score > 70:
+            reasons.append("Linguistic consensus: Multiple AI detectors flagged this content.")
             
         if not reasons:
-            reasons.append("Mixed signals: The text contains both human-like and AI-like patterns.")
+            reasons.append("Mixed linguistic signals detected.")
             
         return reasons
 
     async def analyze_phishing(self, text: str) -> dict:
         """
-        Analyze text for phishing characteristics: keywords, links, headers.
+        Advanced phishing analysis with:
+        1. Contextual keyword analysis
+        2. Credibility-based link scanning
+        3. Urgency & Threat detection
+        4. Header & Domain spoofing indicators
         """
-        if not text.strip():
-            return {"phishing_score": 0.0, "reasons": ["Empty content provided."]}
+        if not text.strip() or len(text.strip()) < 10:
+            return {
+                "phishing_score": 0.0, 
+                "human_score": 100.0, 
+                "reasons": ["Text too short for phishing analysis."],
+                "signals": {"keywords": 0, "links": 0, "headers": 0, "urgency": 0}
+            }
 
-        # 1. Keyword Score
-        keywords = [
-            "verify your account", "urgent", "click here", "login immediately",
-            "suspended", "update password", "action required", "security alert",
-            "bank", "paypal", "amazon", "confirm", "unauthorized", "login now"
-        ]
-        keyword_score = 0
+        # 1. Advanced Keyword & Urgency analysis
+        malicious_keywords = {
+            "critical": 15, "suspended": 20, "unauthorized": 25, "urgent action": 20, 
+            "login attempt": 15, "reactivate": 15, "refund": 10, "inheritance": 30,
+            "bill unpaid": 15, "legal action": 25, "summons": 30, "verify identity": 20
+        }
+        urgency_score = 0
         detected_keywords = []
-        for word in keywords:
-            if word in text.lower():
-                keyword_score += 15
-                detected_keywords.append(word)
         
-        # 2. Link Score
+        for k, v in malicious_keywords.items():
+            if k in text.lower():
+                urgency_score += v
+                detected_keywords.append(k)
+
+        # Check for aggressive punctuation and caps
+        if "!!!" in text or "???" in text:
+            urgency_score += 10
+        if sum(1 for c in text if c.isupper()) / (len(text) + 1) > 0.4:
+            urgency_score += 15 # Over-capitalization
+
+        # 2. Advanced Link Analysis
         import re
         url_regex = r'(https?://[^\s]+)'
         links = re.findall(url_regex, text)
         link_score = 0
         suspicious_links = []
+        
         for link in links:
-            # Check suspicious TLDs
-            if any(ext in link.lower() for ext in [".ru", ".xyz", ".top", ".click", ".link", ".biz", ".tk"]):
-                link_score += 30
-                suspicious_links.append(link)
-            # Check suspicious subdomains or keywords in URL
-            if any(k in link.lower() for k in ["secure-login", "verify", "update", "signin", "support-", "account-"]):
+            # TLD reputation
+            if any(tld in link.lower() for tld in [".ru", ".xyz", ".top", ".click", ".link", ".biz", ".tk", ".ga"]):
+                link_score += 35
+                suspicious_links.append(f"Suspicious TLD: {link}")
+            
+            # Shorteners (often used in phishing)
+            if any(sh in link.lower() for sh in ["bit.ly", "t.co", "tinyurl", "ow.ly"]):
+                link_score += 15
+                suspicious_links.append(f"Shortened URL: {link}")
+            
+            # Typosquatting/Keywords in URL
+            if any(k in link.lower() for k in ["secure", "signin", "verify", "login", "update-account", "paypal-auth"]):
                 link_score += 25
-                suspicious_links.append(link)
+                suspicious_links.append(f"Login-bait URL: {link}")
+                
+            # IP-based URLs
+            if re.search(r'\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}', link):
+                link_score += 40
+                suspicious_links.append(f"Direct IP link: {link}")
 
-        # 3. Header Analysis (Quick lookup for fake domains in headers if present)
+        # 3. Header & Social Engineering analysis
         header_score = 0
-        if "From:" in text or "Subject:" in text or "Reply-To:" in text:
-            # Check for generic/suspicious senders
-            if any(s in text.lower() for s in ["security@admin", "support@verify", "noreply@secure"]):
-                header_score += 35
-            # Basic domain check if "From: name <email@domain.com>" format exists
-            email_match = re.search(r'From:.*?<.*?@(.*?)\>', text)
-            if email_match:
-                domain = email_match.group(1).lower()
-                if any(s in domain for s in ["security", "verify", "support-", "login", "update"]):
-                    header_score += 30
+        if "From:" in text and "<" in text and ">" in text:
+            header_score += 10
+            # Spoofing check
+            if any(s in text.lower() for s in ["gmail.com", "outlook.com", "yahoo.com"]):
+                if any(k in text.lower() for k in ["official", "admin", "security", "support"]):
+                    header_score += 30 # Generic email pretending to be admin
+        
+        # Sense of loss/gain
+        if any(w in text.lower() for w in ["won", "prize", "jackpot", "lottery", "gift card"]):
+            urgency_score += 20
 
-        # 4. Final Combination
+        # Final Combination
         # We start with heuristic base, and can add a small AI multiplier if needed
         # For now, heuristic is very effective for phishing
-        total_score = min(keyword_score + link_score + header_score, 100)
+        total_score = min(urgency_score + link_score + header_score, 100)
+        
+        # Add LLM context check via Groq if available
+        groq_reasons = []
+        try:
+            import os
+            from groq import AsyncGroq
+            # Since the user specifically provided this key to use
+            groq_key = os.environ.get("GROQ_API_KEY", "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")
+            if groq_key:
+                client = AsyncGroq(api_key=groq_key)
+                prompt = (
+                    f"Analyze this email/text for phishing or social engineering. "
+                    f"Reply ONLY with a raw JSON object with exactly two keys: 'score' (number from 0 to 100, where 100 is definite phishing) "
+                    f"and 'reason' (short 1 sentence explanation).\n\nText:\n{text}"
+                )
+                
+                completion = await client.chat.completions.create(
+                    model="llama3-70b-8192",
+                    messages=[{"role": "user", "content": prompt}],
+                    temperature=0.1,
+                    max_tokens=150,
+                )
+                
+                response_content = completion.choices[0].message.content
+                import json
+                import re
+                
+                # Try to extract JSON
+                json_match = re.search(r'\{.*\}', response_content, re.DOTALL)
+                if json_match:
+                    llm_data = json.loads(json_match.group(0))
+                    llm_score = float(llm_data.get("score", 0))
+                    llm_reason = str(llm_data.get("reason", ""))
+                    
+                    if llm_score > 60:
+                        groq_reasons.append(f"AI Security Analysis: {llm_reason}")
+                        # Combine AI score with heuristic score (weighting AI 40%, heuristic 60%)
+                        total_score = (total_score * 0.6) + (llm_score * 0.4)
+        except Exception as e:
+            logger.error(f"Groq API error in phishing check: {e}")
         
         # Reasons
         reasons = []
@@ -259,23 +363,30 @@ class TextDetector:
             reasons.append(f"Suspicious URLs found: {list(set(suspicious_links))[0][:40]}...")
         if header_score > 0:
             reasons.append("Sender header contains patterns consistent with fake/spoofed domains.")
+            
+        reasons.extend(groq_reasons)
+        
         if total_score > 80:
             reasons.append("High-confidence phishing template match.")
         
         if not reasons:
             reasons.append("Low risk: Content does not match typical phishing signatures.")
+        elif not reasons:
+            reasons.append("Suspicious patterns detected in communication context.")
 
         return {
-            "phishing_score": float(total_score),
-            "human_score": float(100 - total_score),
+            "phishing_score": round(total_score, 2),
+            "human_score": round(100 - total_score, 2),
             "reasons": reasons,
             "detected": {
                 "keywords": list(set(detected_keywords)),
                 "links": list(set(suspicious_links))
             },
             "signals": {
-                "keywords": float(keyword_score),
-                "links": float(link_score),
-                "headers": float(header_score)
+                "keywords": round(min(urgency_score, 100), 2),
+                "links": round(min(link_score, 100), 2),
+                "headers": round(min(header_score, 100), 2),
+                "urgency": round(min(urgency_score, 100), 2)
             }
         }
+

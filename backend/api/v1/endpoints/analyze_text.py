@@ -1,5 +1,7 @@
 from fastapi import APIRouter, Request, HTTPException
 from fastapi.responses import JSONResponse
+import math
+
 from pydantic import BaseModel
 from loguru import logger
 from backend.utils.rate_limiter import limiter
@@ -55,10 +57,39 @@ async def analyze_text(request: Request, body: TextAnalysisRequest):
             "details": results
         }
         
-        return JSONResponse(content=response)
+        return JSONResponse(content=_sanitize(response))
     except Exception as e:
         logger.error(f"Text analysis failed: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail=f"Text analysis failed: {str(e)}")
+
+def _sanitize(obj):
+    """
+    Recursively convert non-JSON-serializable types (NumPy scalars, arrays, NaN/Inf)
+    to Python native types.
+    """
+    # Handle numpy types
+    type_name = type(obj).__name__
+    module = getattr(type(obj), "__module__", "")
+
+    if "numpy" in module:
+        if hasattr(obj, "item"):
+            val = obj.item()
+            if isinstance(val, float) and (math.isnan(val) or math.isinf(val)):
+                return None
+            return val
+        if hasattr(obj, "tolist"):
+            return obj.tolist()
+
+    if isinstance(obj, dict):
+        return {k: _sanitize(v) for k, v in obj.items()}
+
+    if isinstance(obj, (list, tuple)):
+        return [_sanitize(i) for i in obj]
+
+    if isinstance(obj, float) and (math.isnan(obj) or math.isinf(obj)):
+        return None
+
+    return obj
 
 def _get_ai_verdict(score: float) -> str:
     if score < 30:

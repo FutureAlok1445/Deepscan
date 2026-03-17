@@ -3,6 +3,7 @@ import numpy as np
 import subprocess
 import tempfile
 import os
+import asyncio
 from loguru import logger
 
 class LipSyncAnalyzer:
@@ -15,26 +16,32 @@ class LipSyncAnalyzer:
         self.face_cascade = cv2.CascadeClassifier(cv2.data.haarcascades + 'haarcascade_frontalface_default.xml')
         logger.info("LipSyncAnalyzer initialized (AV cross-correlation)")
 
-    def _extract_audio_energy(self, video_path: str, n_windows: int) -> np.ndarray | None:
-        """Extract per-window RMS audio energy using FFmpeg."""
+    async def _extract_audio_energy(self, video_path: str, n_windows: int) -> np.ndarray | None:
+        """Extract per-window RMS audio energy using FFmpeg (async-friendly)."""
         try:
             # Write audio to temp WAV using FFmpeg
             tmp_wav = tempfile.mktemp(suffix=".wav")
-            result = subprocess.run(
-                ["ffmpeg", "-i", video_path, "-vn", "-acodec", "pcm_s16le",
-                 "-ar", "16000", "-ac", "1", tmp_wav, "-y", "-loglevel", "error"],
-                capture_output=True, timeout=15
+            
+            # Using asyncio to run the subprocess without blocking
+            process = await asyncio.create_subprocess_exec(
+                "ffmpeg", "-i", video_path, "-vn", "-acodec", "pcm_s16le",
+                "-ar", "16000", "-ac", "1", tmp_wav, "-y", "-loglevel", "error",
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.PIPE
             )
+            await asyncio.wait_for(process.wait(), timeout=15.0)
+
             if not os.path.exists(tmp_wav) or os.path.getsize(tmp_wav) < 1000:
-                logger.warning("LipSync: FFmpeg could not extract audio (no audio track?)")
                 return None
 
             # Read raw PCM
-            import struct
-            with open(tmp_wav, 'rb') as f:
-                f.read(44)  # Skip WAV header
-                raw = f.read()
-            os.unlink(tmp_wav)
+            def _read_pcm():
+                with open(tmp_wav, 'rb') as f:
+                    f.read(44)  # Skip WAV header
+                    return f.read()
+            
+            raw = await asyncio.to_thread(_read_pcm)
+            if os.path.exists(tmp_wav): os.unlink(tmp_wav)
 
             if len(raw) < 100:
                 return None
@@ -54,11 +61,15 @@ class LipSyncAnalyzer:
             ])
             return energy
 
-        except FileNotFoundError:
-            logger.warning("LipSync: FFmpeg not found — skipping audio extraction")
+        except FileNotFoundError as e:
+            logger.warning("LipSync: FFmpeg NOT FOUND. Please install FFmpeg and add it to your PATH.")
             return None
         except Exception as e:
-            logger.warning(f"LipSync: Audio extraction failed: {e}")
+            msg = str(e)
+            if "[WinError 2]" in msg or "ffmpeg" in msg.lower():
+                 logger.warning("LipSync: FFmpeg executable not found. Audio extraction skipped.")
+            else:
+                logger.warning(f"LipSync: Audio extraction failed: {e}")
             return None
 
     def _extract_mouth_aperture(self, frames: list) -> np.ndarray:
@@ -87,7 +98,7 @@ class LipSyncAnalyzer:
 
         return np.array(apertures, dtype=np.float32)
 
-    def analyze(self, video_path: str, frames: list) -> dict:
+    async def analyze(self, video_path: str, frames: list) -> dict:
         """
         Full lip-sync cross-correlation analysis.
         Logic: Real human speech is physically coupled to mouth movement.
@@ -99,7 +110,7 @@ class LipSyncAnalyzer:
             return {"score": 50.0, "detail": "Insufficient data", "reasoning": "Video length too short to compute reliable AV cross-correlation."}
 
         n = len(frames)
-        audio_energy = self._extract_audio_energy(video_path, n)
+        audio_energy = await self._extract_audio_energy(video_path, n)
         if audio_energy is None:
             return {"score": 25.0, "detail": "No audio", "reasoning": "No acoustic signal detected for sync verification. Analysis inconclusive."}
 
@@ -129,8 +140,9 @@ class LipSyncAnalyzer:
 
         # --- Scientific Scoring ---
         # Sigmoid centered at 0.4 correlation. Values < 0.25 are high-confidence fakes.
+        # Higher pearson_corr -> higher exp() -> lower score.
+        # Lower pearson_corr -> lower exp() -> higher score (fake).
         score = 100 / (1 + np.exp(8 * (pearson_corr - 0.35)))
-        score = 100 - score # Invert so high = fake
 
         details = []
         reasoning_list = []

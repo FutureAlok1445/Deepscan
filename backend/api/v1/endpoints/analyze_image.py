@@ -97,6 +97,16 @@ async def analyze_image_endpoint(
 
     # 1. Create pending DB record
     scan = crud.create_scan(db=db, user_id=None) # Anonymous for now
+
+    # 1.5: Run lightweight context verification (Google Vision) on the original bytes
+    try:
+        from backend.services.context_verification import reverse_image_search
+
+        await file.seek(0)
+        context_result = await reverse_image_search(await file.read())
+    except Exception as e:
+        logger.error(f"Context verification failed: {e}")
+        context_result = None
     
     # 2. Add to background queue
     background_tasks.add_task(
@@ -108,7 +118,11 @@ async def analyze_image_endpoint(
     )
     
     # 3. Return immediately
-    return {"status": "pending", "job_id": scan.id}
+    return {
+        "status": "pending",
+        "job_id": scan.id,
+        "context_result": context_result,
+    }
 
 @router.get("/result/{job_id}")
 def get_scan_result(job_id: str, db: Session = Depends(get_db)):

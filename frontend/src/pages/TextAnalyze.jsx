@@ -3,6 +3,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { Shield, Zap, RefreshCw, AlertTriangle, CheckCircle, BarChart3, Binary, MessageSquare, BrainCircuit, Mail, Link as LinkIcon, Globe, Lock } from 'lucide-react';
 import axios from 'axios';
 import toast from 'react-hot-toast';
+import { analyzeText } from '../api/deepscan';
 import BrutalCard from '../components/ui/BrutalCard';
 import BrutalButton from '../components/ui/BrutalButton';
 
@@ -30,17 +31,18 @@ export default function TextAnalyze() {
     setResult(null);
 
     try {
-      const response = await axios.post(`${API_BASE_URL}/api/v1/analyze/text`, { text, mode });
-      setResult(response.data);
+      // Use centralized API service for consistency
+      const data = await analyzeText(text, mode);
+      setResult(data);
       toast.success('Analysis complete!');
-
-      // Scroll to result after a short delay to allow animation
+      
       setTimeout(() => {
         resultRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
       }, 300);
     } catch (error) {
       console.error('Analysis failed:', error);
-      toast.error(error.response?.data?.detail || 'Analysis failed. Please try again.');
+      const detail = error.response?.data?.detail || error.message || 'Analysis failed. Please try again.';
+      toast.error(detail);
     } finally {
       setIsLoading(false);
     }

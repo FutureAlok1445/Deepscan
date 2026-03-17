@@ -6,7 +6,7 @@ const ENGINE_META = {
     // Classic engines — mapped by engine name from backend findings
     'Spatio-Temporal-Analysis': { label: 'Spatio-Temporal', icon: Scan, desc: 'ViT + Optical Flow' },
     'Latent-Trajectory-Curvature': { label: 'Physics (LTCA)', icon: Activity, desc: 'Latent space physics' },
-    'rPPG-Heartbeat': { label: 'Heartbeat (rPPG)', icon: Radio, desc: 'Facial blood-flow pulse' },
+    'rPPG-Biological-Pulse': { label: 'Heartbeat (rPPG)', icon: Radio, desc: 'Facial blood-flow pulse' },
     'Audio-Spoof-Detection': { label: 'Audio Clone', icon: Waves, desc: '9-signature voice analysis' },
     // Audio deep signatures
     'F0-Stability-Analysis': { label: 'F0 Vocal Stability', icon: Waves, desc: 'Fundamental frequency jitter' },
@@ -112,8 +112,8 @@ export default function DetectionBreakdown({ findings = [], ltcaData = {} }) {
             </div>
 
             {/* Supplementary Telemetry */}
-            {(ltcaData.sync_correlation != null || ltcaData.vtl_mean != null) && (
-                <div className="mt-6 p-4 border-2 border-ds-silver/10 bg-black/20 grid grid-cols-2 sm:grid-cols-4 gap-4 text-[10px] font-mono">
+            {(ltcaData.sync_correlation != null || ltcaData.vtl_mean != null || ltcaData.rppg_bpm != null) && (
+                <div className="mt-6 p-4 border-2 border-ds-silver/10 bg-black/20 grid grid-cols-2 lg:grid-cols-6 gap-4 text-[10px] font-mono">
                     {ltcaData.sync_correlation != null && (
                         <div className="space-y-1">
                             <p className="text-ds-silver/30 uppercase">AV Correlation</p>
@@ -136,6 +136,18 @@ export default function DetectionBreakdown({ findings = [], ltcaData = {} }) {
                         <div className="space-y-1">
                             <p className="text-ds-silver/30 uppercase">Stochastic Blinks</p>
                             <p className="text-ds-cyan font-bold">{ltcaData.blinks_detected}</p>
+                        </div>
+                    )}
+                    {ltcaData.rppg_bpm != null && (
+                        <div className="space-y-1">
+                            <p className="text-ds-silver/30 uppercase">Pulse Rate</p>
+                            <p className="text-ds-cyan font-bold">{ltcaData.rppg_bpm} BPM</p>
+                        </div>
+                    )}
+                    {ltcaData.rppg_snr != null && (
+                        <div className="space-y-1">
+                            <p className="text-ds-silver/30 uppercase">rPPG Signal SNR</p>
+                            <p className="text-ds-cyan font-bold">{ltcaData.rppg_snr < 0.05 ? 'NOISE' : ltcaData.rppg_snr.toFixed(3)}</p>
                         </div>
                     )}
                 </div>
