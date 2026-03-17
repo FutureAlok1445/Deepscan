@@ -223,6 +223,143 @@ function normalizeResult(data) {
   return data;
 }
 
+/**
+ * Normalize a backend image-specific result (from /analyze/image endpoint)
+ * into the shape the frontend Result.jsx + components expect.
+ */
+function normalizeImageResult(jobId, scanData, originalFilename) {
+  const exp = scanData.explainability || {};
+  const signals = scanData.signals || {};
+  const score = scanData.score ?? 0;
+  const verdict = scanData.verdict ?? 'Uncertain';
+
+  // Map backend verdict strings → frontend VERDICT_CONFIG keys
+  const verdictMap = {
+    'Authentic': 'AUTHENTIC',
+    'Uncertain': 'UNCERTAIN',
+    'Likely Fake': 'LIKELY_FAKE',
+    'Definitely Fake': 'DEFINITELY_FAKE',
+  };
+
+  // Build findings from signals
+  const findings = [];
+  if (signals.visual_forensics_mas !== undefined) {
+    const mas = signals.visual_forensics_mas;
+    findings.push({
+      severity: mas < 35 ? 'high' : mas < 50 ? 'medium' : 'normal',
+      title: 'ELA Pixel Manipulation Score',
+      detail: `Visual forensics MAS score: ${mas.toFixed(1)}/100. Lower = more suspicious.`,
+      engine: 'IMAGE',
+      confidence: Math.round(100 - mas),
+    });
+  }
+  if (signals.face_geometry_pps !== undefined) {
+    const pps = signals.face_geometry_pps;
+    findings.push({
+      severity: pps < 35 ? 'high' : pps < 50 ? 'medium' : 'normal',
+      title: 'Face Geometry Analysis',
+      detail: `Facial proportions score: ${pps.toFixed(1)}/100. Lower = unnatural geometry.`,
+      engine: 'IMAGE',
+      confidence: Math.round(100 - pps),
+    });
+  }
+  if (signals.frequency !== undefined) {
+    const freq = signals.frequency;
+    findings.push({
+      severity: freq < 35 ? 'high' : freq < 50 ? 'medium' : 'normal',
+      title: 'Frequency Domain Analysis',
+      detail: `Frequency fingerprint score: ${freq.toFixed(1)}/100. GAN artifacts leave high-freq traces.`,
+      engine: 'IMAGE',
+      confidence: Math.round(100 - freq),
+    });
+  }
+  if (signals.metadata_cvs !== undefined) {
+    const cvs = signals.metadata_cvs;
+    findings.push({
+      severity: cvs < 55 ? 'medium' : 'normal',
+      title: 'EXIF Metadata Validity',
+      detail: `Context validity score: ${cvs.toFixed(1)}/100. Missing/stripped EXIF suggests editing.`,
+      engine: 'META',
+      confidence: Math.round(cvs),
+    });
+  }
+  if (signals.diffusion_fingerprint !== undefined) {
+    const diff = signals.diffusion_fingerprint;
+    findings.push({
+      severity: diff < 35 ? 'high' : diff < 50 ? 'medium' : 'normal',
+      title: 'Diffusion Model Fingerprint',
+      detail: `Diffusion noise score: ${diff.toFixed(1)}/100. Detects AI image generation artifacts.`,
+      engine: 'IMAGE',
+      confidence: Math.round(100 - diff),
+    });
+  }
+
+  // Build forensics block with ELA heatmap + noise map
+  let elaBase64 = exp.ela_base64_heatmap_prefix || '';
+  if (elaBase64 && !elaBase64.startsWith('data:')) {
+    elaBase64 = `data:image/jpeg;base64,${elaBase64}`;
+  }
+  // Prefer the high-quality JET thermal heatmap over the legacy one
+  const elaThermal = exp.ela_thermal_b64 || elaBase64 || null;
+  const noiseMap   = exp.noise_map_b64   || null;
+
+  const forensics = {
+    ela: {
+      score: Math.round(100 - (signals.visual_forensics_mas ?? 50)),
+      image_url: elaThermal,
+      ela_thermal_b64: elaThermal,
+      noise_map_b64: noiseMap,
+      ela_score: exp.ela_score ?? 0,
+      noise_score: exp.noise_score ?? 0,
+      description: 'Error Level Analysis heatmap: red/orange regions indicate pixel-level manipulation (high compression-error energy). Dark blue = authentic regions.',
+    },
+    metadata: {
+      Software: 'DeepScan ELA Engine',
+      description: 'Mathematically derived from JPEG re-compression differences at 90% quality.',
+    },
+  };
+
+  // Build gradcam block using ELA heatmap (same image, different label)
+  const gradcam = {
+    original_url: null,
+    heatmap_url: elaBase64 || null,
+    heatmap_label: 'ELA Heatmap (Edited Pixel Map)',
+    regions: exp.regions || [],
+  };
+
+  // Sub-scores mapped from signals
+  const sub_scores = {
+    mas: Math.round(100 - (signals.visual_forensics_mas ?? 50)),
+    pps: Math.round(100 - (signals.face_geometry_pps ?? 50)),
+    freq: Math.round(100 - (signals.frequency ?? 50)),
+    cvs: Math.round(signals.metadata_cvs ?? 50),
+    diffusion: Math.round(100 - (signals.diffusion_fingerprint ?? 50)),
+  };
+
+  const normalized = {
+    id: jobId,
+    score,
+    aacs_score: score,
+    verdict: verdictMap[verdict] || 'UNCERTAIN',
+    filename: originalFilename || 'image',
+    file_type: 'image/jpeg',
+    status: 'complete',
+    created_at: new Date().toISOString(),
+    findings,
+    forensics,
+    gradcam,
+    sub_scores,
+    narrative: {
+      summary: exp.text || 'Image analysis complete.',
+      eli5: `The image scored ${score.toFixed(1)}/100 for deepfake likelihood. Verdict: ${verdict}.`,
+      detailed: exp.text || '',
+      technical: Object.entries(signals).map(([k,v]) => `${k}=${typeof v === 'number' ? v.toFixed(1) : v}`).join(', '),
+    },
+    _isImageResult: true,
+  };
+  return normalized;
+}
+
 // ─── Cache fresh scan results in localStorage so /result/:id can find them ───
 function cacheResult(id, data) {
   try {
@@ -262,14 +399,19 @@ function getLocalHistory() {
 }
 
 export async function analyzeFile(file, onUploadProgress, language = 'en') {
+  // ─── Route image files to the dedicated /analyze/image endpoint ───
+  const isImage = file.type?.startsWith('image/');
+  if (isImage) {
+    return analyzeImageFile(file);
+  }
+
   const formData = new FormData();
   formData.append('file', file);
   formData.append('language', language);
   formData.append('session_id', getSessionId());
-  // Large videos need a much longer timeout — 30 minutes
   const res = await api.post('/analyze', formData, {
     headers: { 'Content-Type': 'multipart/form-data' },
-    timeout: 30 * 60 * 1000,  // 30 minutes
+    timeout: 30 * 60 * 1000,
     onUploadProgress,
   });
   const result = normalizeResult(res.data);
@@ -284,6 +426,48 @@ export async function analyzeFile(file, onUploadProgress, language = 'en') {
     created_at: result.created_at,
   });
   return result;
+}
+
+/**
+ * Dedicated image analysis function:
+ * 1. POST to /analyze/image (returns job_id immediately)
+ * 2. Poll /analyze/result/:job_id until status = 'done'
+ * 3. Normalize the result shape for the frontend
+ */
+async function analyzeImageFile(file) {
+  const formData = new FormData();
+  formData.append('file', file);
+
+  // Step 1: submit job
+  const submitRes = await api.post('/analyze/image', formData, {
+    headers: { 'Content-Type': 'multipart/form-data' },
+    timeout: 30000,
+  });
+  const { job_id } = submitRes.data;
+  if (!job_id) throw new Error('Image analysis did not return a job_id');
+
+  // Step 2: poll for result (up to 60s)
+  for (let attempt = 0; attempt < 30; attempt++) {
+    await new Promise(r => setTimeout(r, 2000));
+    const pollRes = await api.get(`/analyze/result/${job_id}`);
+    const { status, data } = pollRes.data;
+    if (status === 'done' && data) {
+      const normalized = normalizeImageResult(job_id, data, file.name);
+      cacheResult(job_id, normalized);
+      cacheHistoryItem({
+        id: job_id,
+        score: normalized.score,
+        aacs_score: normalized.score,
+        verdict: normalized.verdict,
+        filename: file.name,
+        file_type: 'image',
+        created_at: normalized.created_at,
+      });
+      return normalized;
+    }
+    if (status === 'failed') throw new Error('Image analysis failed on the server.');
+  }
+  throw new Error('Image analysis timed out. Please try again.');
 }
 
 export async function analyzeUrl(url, language = 'en') {
@@ -303,12 +487,25 @@ export async function analyzeUrl(url, language = 'en') {
 }
 
 export async function getResult(id) {
-  // 1. Try the real API first
+  // 1. Try the standard multi-modal API first
   try {
     const res = await api.get(`/analyze/${id}`);
     return normalizeResult(res.data);
   } catch (err) {
-    // 2. Fall back to our local cache (survives server restarts)
+    if (err.response?.status === 404) {
+      // 2. Try the image-specific API (job polling endpoint)
+      try {
+        const imageRes = await api.get(`/analyze/result/${id}`);
+        // The image endpoint returns { job_id, status, data: { ... } }
+        if (imageRes.data?.status === 'done' && imageRes.data?.data) {
+          return normalizeImageResult(id, imageRes.data.data, 'Image Scan');
+        }
+      } catch (imageErr) {
+        // Ignore and fallback to cache
+      }
+    }
+    
+    // 3. Fall back to our local cache (survives server restarts)
     const cached = getCachedResult(id);
     if (cached) return cached;
     throw err;
@@ -377,8 +574,8 @@ export async function submitFeedback(args) {
  * @param {string} language - Language code (default 'en')
  * @returns {Promise<Object>} Analysis result
  */
-export async function analyzeText(text, language = 'en') {
-  const res = await api.post('/analyze/text', { text, language });
+export async function analyzeText(text, mode = 'ai', language = 'en') {
+  const res = await api.post('/analyze/text', { text, mode, language });
   const result = res.data;
   cacheResult(result.id, result);
   cacheHistoryItem({

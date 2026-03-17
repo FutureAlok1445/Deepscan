@@ -346,3 +346,107 @@ html { scroll-behavior: smooth; }
   background-size: 4px 4px, 6px 6px;
   background-position: 0 0, 2px 2px;
 }
+
+/* ═══ Google Translate UI Fixes ═══ */
+/* Hide EVERYTHING related to the default google widget UI */
+.goog-te-banner-frame,
+.goog-te-banner-frame.skiptranslate,
+.goog-te-gadget-icon,
+.goog-logo-link,
+.goog-te-gadget span {
+  display: none !important;
+  visibility: hidden !important;
+}
+
+/* Hide the tooltip that appears when hovering over translated text */
+#goog-gt-tt, .goog-te-balloon-frame {
+  display: none !important;
+  visibility: hidden !important;
+}
+
+/* Force body to top (Google Translate often pushes it down by 40px) */
+body { 
+  top: 0px !important; 
+  position: static !important;
+}
+.skiptranslate {
+  display: none !important;
+}
+
+
+/* Custom Language Selector UI */
+.lang-selector-container {
+  position: relative;
+  z-index: 1000;
+}
+
+.lang-dropdown {
+  background: var(--bg-alt);
+  border: 3px solid var(--silver);
+  box-shadow: 8px 8px 0 #000;
+  width: 280px;
+  max-height: 400px;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+.lang-search-wrapper {
+  padding: 12px;
+  border-bottom: 2px solid rgba(224, 224, 224, 0.1);
+}
+
+.lang-search-input {
+  width: 100%;
+  background: transparent;
+  border: 2px solid var(--silver);
+  padding: 8px 12px;
+  color: var(--silver);
+  font-family: var(--font-mono);
+  font-size: 11px;
+  text-transform: uppercase;
+  outline: none;
+}
+
+.lang-search-input:focus {
+  border-color: var(--red);
+}
+
+.lang-list {
+  overflow-y: auto;
+  flex: 1;
+  padding: 8px 0;
+}
+
+.lang-list::-webkit-scrollbar {
+  width: 4px;
+}
+
+.lang-list::-webkit-scrollbar-thumb {
+  background: var(--red);
+}
+
+.lang-item {
+  padding: 8px 16px;
+  width: 100%;
+  text-align: left;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  text-transform: uppercase;
+  color: var(--silver);
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.lang-item:hover {
+  background: var(--red);
+  color: #fff;
+}
+
+.lang-item.active {
+  background: rgba(255, 60, 0, 0.2);
+  color: var(--red);
+  font-weight: bold;
+}
+
+

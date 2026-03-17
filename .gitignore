@@ -5,3 +5,6 @@ dist/
 .env
 .DS_Store\n
 .venv
+*.db
+backend/deepscan.db
+947d57bab2ef0704961ca1f071194c293c9133d2

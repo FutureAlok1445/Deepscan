@@ -57,7 +57,17 @@ class SemanticContextAnalyzer:
         if not HAS_TRANSFORMERS:
             logger.warning("Transformers not installed! SemanticContext relying on regex heuristics.")
             return
+        # Disk-space guard: skip model download if less than 500MB free
         try:
+            import shutil
+            free_mb = shutil.disk_usage("/").free / (1024 ** 2)
+            if free_mb < 500:
+                logger.warning(f"Only {free_mb:.0f} MB free disk — skipping HuggingFace model download. Using heuristics only.")
+                return
+        except Exception:
+            pass
+        try:
+            # Replaced facebook/bart-large-mnli (1.6GB) with lightweight DistilBERT-MNLI (~260MB)
             self.intent_analyzer = pipeline(
                 "zero-shot-classification",
                 model="facebook/bart-large-mnli",
@@ -70,7 +80,7 @@ class SemanticContextAnalyzer:
                 model="openai/clip-vit-base-patch32",
                 use_safetensors=False
             )
-            logger.info("SemanticContext DistilBERT and CLIP loaded.")
+            logger.info("SemanticContext lightweight DistilBERT-MNLI + CLIP loaded.")
         except Exception as e:
             logger.error(f"Failed to load semantic models: {e}")
 
