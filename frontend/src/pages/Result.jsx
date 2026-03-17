@@ -150,11 +150,11 @@ export default function Result() {
             <ShareVerdict verdict={verdict.label} score={score} resultId={result.id || id} />
 
             {/* Quick score */}
-            <div className="flex items-center gap-4">
-              <span className={`text-3xl sm:text-5xl font-grotesk font-black ${getScoreColor(score)}`}>
+            <div className="flex items-center gap-4 pt-2">
+              <span className="px-4 py-2 text-white rounded font-mono font-bold text-lg border-2 border-white/10 shadow-lg" style={{ background: score >= 70 ? 'rgb(255, 68, 34)' : score >= 40 ? '#ffd700' : '#39ff14', color: score >= 40 && score < 70 ? '#000' : '#fff' }}>
                 {formatScore(score)}
               </span>
-              <span className="text-xs sm:text-sm font-mono text-ds-silver/40">AACS Score</span>
+              <span className="text-xs sm:text-sm font-mono text-ds-silver/40 uppercase tracking-widest font-black">AACS Score</span>
             </div>
           </BrutalCard>
         </div>
