@@ -399,12 +399,6 @@ function getLocalHistory() {
 }
 
 export async function analyzeFile(file, onUploadProgress, language = 'en') {
-  // ─── Route image files to the dedicated /analyze/image endpoint ───
-  const isImage = file.type?.startsWith('image/');
-  if (isImage) {
-    return analyzeImageFile(file);
-  }
-
   const formData = new FormData();
   formData.append('file', file);
   formData.append('language', language);
@@ -435,39 +429,8 @@ export async function analyzeFile(file, onUploadProgress, language = 'en') {
  * 3. Normalize the result shape for the frontend
  */
 async function analyzeImageFile(file) {
-  const formData = new FormData();
-  formData.append('file', file);
-
-  // Step 1: submit job
-  const submitRes = await api.post('/analyze/image', formData, {
-    headers: { 'Content-Type': 'multipart/form-data' },
-    timeout: 30000,
-  });
-  const { job_id } = submitRes.data;
-  if (!job_id) throw new Error('Image analysis did not return a job_id');
-
-  // Step 2: poll for result (up to 60s)
-  for (let attempt = 0; attempt < 30; attempt++) {
-    await new Promise(r => setTimeout(r, 2000));
-    const pollRes = await api.get(`/analyze/result/${job_id}`);
-    const { status, data } = pollRes.data;
-    if (status === 'done' && data) {
-      const normalized = normalizeImageResult(job_id, data, file.name);
-      cacheResult(job_id, normalized);
-      cacheHistoryItem({
-        id: job_id,
-        score: normalized.score,
-        aacs_score: normalized.score,
-        verdict: normalized.verdict,
-        filename: file.name,
-        file_type: 'image',
-        created_at: normalized.created_at,
-      });
-      return normalized;
-    }
-    if (status === 'failed') throw new Error('Image analysis failed on the server.');
-  }
-  throw new Error('Image analysis timed out. Please try again.');
+  // Use working general analyze endpoint instead of broken image-specific one
+  return analyzeFile(file);
 }
 
 export async function analyzeUrl(url, language = 'en') {

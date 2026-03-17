@@ -1,6 +1,7 @@
 import torch
 import torch.nn as nn
 from torchvision import models, transforms
+import timm
 from timm import create_model
 from loguru import logger
 import cv2
@@ -14,7 +15,11 @@ class MesoNet4Detector:
     '''
     def __init__(self):
         try:
-            self.model = create_model('mesonet', pretrained=True)
+            # Fallback to xception if mesonet is unavailable in timm
+            model_name = 'mesonet' if 'mesonet' in timm.list_models() else 'xception'
+            if model_name == 'xception':
+                logger.warning("MesoNet not found in timm, falling back to Xception architecture")
+            self.model = create_model(model_name, pretrained=True, num_classes=2 if model_name == 'xception' else 1)
             self.model.eval()
             self.device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
             self.model.to(self.device)
@@ -82,7 +87,7 @@ def ensemble_sota(scores: List[Dict]) -> Dict[str, float]:
     return {'score': float(avg_score), 'confidence': float(avg_conf)}
 
 sota_ensemble = {
-    'mesonet': MesoNet4Detector(),
+    'mesonet4': MesoNet4Detector(),
     'xception': XceptionDetector()
 }
 
