@@ -3,14 +3,14 @@ import { Download, FileText, Loader } from 'lucide-react';
 import { downloadReport } from '../../api/deepscan';
 import BrutalButton from '../ui/BrutalButton';
 
-export default function DownloadReport({ resultId }) {
+export default function DownloadReport({ resultId, currentScore, currentVerdict }) {
   const [loading, setLoading] = useState(false);
 
   const handleDownload = async () => {
     if (!resultId) return;
     setLoading(true);
     try {
-      const blob = await downloadReport(resultId);
+      const blob = await downloadReport(resultId, currentScore, currentVerdict);
       if (blob instanceof Blob) {
         const url = URL.createObjectURL(blob);
         const a = document.createElement('a');

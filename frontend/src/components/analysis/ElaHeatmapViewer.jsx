@@ -9,7 +9,7 @@ const TABS = [
 
 const SEV_COLOR = { HIGH: '#ff3c00', MEDIUM: '#ffd700', LOW: '#00f5ff' };
 
-export default function ElaHeatmapViewer({ elaData, imageFile, systemScore, systemVerdict }) {
+export default function ElaHeatmapViewer({ elaData, imageFile, onScoreComputed }) {
   const canvasRef = useRef(null);
   
   const [mode, setMode]               = useState('blend');
@@ -211,6 +211,9 @@ export default function ElaHeatmapViewer({ elaData, imageFile, systemScore, syst
         offCanvas.getContext('2d').putImageData(thermal, 0, 0);
 
         setAnalysisData({ W, H, offCanvas, scoring });
+        if (onScoreComputed) {
+           onScoreComputed(scoring);
+        }
       } catch (e) {
         console.error("Client-side ELA analysis failed:", e);
       } finally {
@@ -345,37 +348,23 @@ export default function ElaHeatmapViewer({ elaData, imageFile, systemScore, syst
         />
       </div>
 
-      {/* Verdict & Score (Synced with System Result) */}
+      {/* Verdict & Score (Exactly like reference UI layout for bottom bar) */}
       {scoreData && (
         <div className="bg-[#2a2a2a] px-5 py-3 border-t border-ds-silver/20 flex flex-wrap items-center justify-between gap-3">
-          <div className="flex flex-col gap-1">
+            <div className="flex flex-col gap-1 w-full">
             <div className="flex items-center gap-2 text-[13px] font-bold">
-              {/* Score-dependent color logic */}
-              {(() => {
-                const finalScore = systemScore ?? scoreData.score;
-                const finalVerdict = systemVerdict?.label ?? (scoreData.verdict === 'FAKE' ? 'AI detected' : scoreData.verdict === 'PARTIAL' ? 'Partial AI detected' : 'Likely authentic');
-                const finalColor = finalScore >= 70 ? '#ff4422' : finalScore >= 40 ? '#ffaa00' : '#00cc55';
-                
-                return (
-                  <>
-                    <div className="w-[18px] h-[18px] rounded-full text-[9.5px] text-white flex items-center justify-center font-black" style={{ background: finalColor }}>!</div>
-                    <span style={{ color: finalColor }}>
-                      {finalVerdict}
-                    </span>
-                    <span className="px-3 py-1 text-white rounded font-mono font-bold text-xs" style={{ background: finalColor }}>
-                      {finalScore}%
-                    </span>
-                  </>
-                );
-              })()}
+              <div className="w-[18px] h-[18px] rounded-full text-[9.5px] text-white flex items-center justify-center" style={{ background: scoreData.score > 62 ? '#ff4422' : scoreData.score > 32 ? '#ffaa00' : '#00cc55'}}>!</div>
+              <span className={scoreData.score > 62 ? 'text-[#ff5533]' : scoreData.score > 32 ? 'text-[#ffaa00]' : 'text-[#00cc55]'}>
+                {scoreData.verdict === 'FAKE' ? 'High ELA Anomalies' : scoreData.verdict === 'PARTIAL' ? 'Partial ELA Anomalies' : 'Natural ELA Profile'}
+              </span>
+              <span className="px-3 py-1 text-white rounded font-mono font-bold text-[10px] uppercase tracking-widest" style={{ background: scoreData.score > 62 ? '#ff4422' : scoreData.score > 32 ? '#ffaa00' : '#00cc55'}}>
+                ELA Anomaly Score: {scoreData.score}%
+              </span>
             </div>
             <div className="text-[11.5px] text-[#888] font-mono leading-tight max-w-[500px]">
-              {scoreData.summary}
+              {scoreData.summary.substring(0, 100)}...
             </div>
           </div>
-          <button className="flex items-center gap-2 px-5 py-2.5 border-[1.5px] border-[#aaa] rounded-lg bg-transparent text-[#e8edf5] text-[13px] font-bold font-syne hover:bg-white/5 hover:border-white transition-all flex-shrink-0">
-            📋 Report
-          </button>
         </div>
       )}
 

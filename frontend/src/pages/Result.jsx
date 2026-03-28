@@ -33,11 +33,15 @@ export default function Result() {
   const originalFile = location.state?.originalFile || null;
   const resultRef = useRef(null);
 
+  const [localElaScore, setLocalElaScore] = React.useState(null);
+
   const { data: result, isLoading, error } = useQuery({
     queryKey: ['result', id],
     queryFn: () => getResult(id),
     retry: 1,
   });
+
+  console.log("Result.jsx loaded, AACS Score and ContextVerification were removed in the previous version");
 
   // GSAP staggered entry animation — runs whenever result changes
   useEffect(() => {
@@ -91,8 +95,14 @@ export default function Result() {
     );
   }
 
-  const verdict = VERDICT_CONFIG[result.verdict] || VERDICT_CONFIG.UNCERTAIN;
-  const score = result.score ?? result.aacs_score ?? 0;
+  const baseVerdict = VERDICT_CONFIG[result.verdict] || VERDICT_CONFIG.UNCERTAIN;
+  const baseScore = result.score ?? result.aacs_score ?? 0;
+
+  // Sync with client-side ELA calculation if it's rendered
+  const displayScore = localElaScore ? localElaScore.score : baseScore;
+  const displayVerdictLabel = localElaScore
+    ? (localElaScore.verdict === 'FAKE' ? 'DEFINITELY FAKE' : localElaScore.verdict === 'PARTIAL' ? 'LIKELY AI' : 'AUTHENTIC')
+    : baseVerdict.label;
 
   return (
     <div ref={resultRef} className="relative min-h-screen bg-ds-bg pt-24 pb-16 px-4 sm:px-6 lg:px-8">
@@ -105,20 +115,11 @@ export default function Result() {
           <ArrowLeft className="w-4 h-4" /> Back to Analyze
         </Link>
 
-        {/* Top row — Score + Verdict */}
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 result-section">
-          {/* Score Gauge */}
-          <BrutalCard className="flex flex-col items-center justify-center lg:col-span-1 score-display">
-            <TrustScoreGauge score={score} size={typeof window !== 'undefined' && window.innerWidth < 640 ? 160 : 220} />
-            <div className="mt-4 text-center">
-              <span className="px-3 py-1 text-white rounded font-mono font-bold text-xs uppercase tracking-widest" style={{ background: score >= 70 ? 'rgb(255, 68, 34)' : score >= 40 ? '#ffd700' : '#39ff14', color: score >= 40 && score < 70 ? '#000' : '#fff' }}>
-                {verdict.emoji} {verdict.label} — {formatScore(score)}
-              </span>
-            </div>
-          </BrutalCard>
+        {/* Top row — Verdict Details */}
+        <div className="grid grid-cols-1 gap-6 result-section">
 
           {/* Details */}
-          <BrutalCard className="lg:col-span-2 space-y-4">
+          <BrutalCard className="space-y-4">
             <div className="flex items-start justify-between flex-wrap gap-2">
               <div>
                 <h1 className="font-grotesk font-black text-xl sm:text-2xl text-ds-silver">
@@ -127,9 +128,17 @@ export default function Result() {
                 <p className="text-xs font-mono text-ds-silver/40 mt-1">
                   ID: {result.id || id} &bull; {formatDateTime(result.created_at)}
                 </p>
+                {localElaScore && (
+                  <div className="mt-4 flex items-center gap-2 text-sm font-mono text-ds-silver mb-2 border border-ds-silver/20 p-2 rounded max-w-fit">
+                    <span className="font-bold">System Score:</span>
+                    <span className="px-2 py-0.5 text-white rounded text-xs uppercase tracking-widest" style={{ background: localElaScore.score > 62 ? '#ff4422' : localElaScore.score > 32 ? '#ffaa00' : '#00cc55' }}>
+                      ELA ANOMALY: {localElaScore.score}%
+                    </span>
+                  </div>
+                )}
               </div>
               <div className="flex items-center gap-2">
-                <DownloadReport resultId={result.id || id} />
+                <DownloadReport resultId={result.id || id} currentScore={displayScore} currentVerdict={displayVerdictLabel} />
               </div>
             </div>
 
@@ -147,26 +156,18 @@ export default function Result() {
             )}
 
             {/* Share */}
-            <ShareVerdict verdict={verdict.label} score={score} resultId={result.id || id} />
+            <ShareVerdict verdict={displayVerdictLabel} score={displayScore} resultId={result.id || id} />
 
-            {/* Quick score */}
-            <div className="flex items-center gap-4 pt-2">
-              <span className="px-4 py-2 text-white rounded font-mono font-bold text-lg border-2 border-white/10 shadow-lg" style={{ background: score >= 70 ? 'rgb(255, 68, 34)' : score >= 40 ? '#ffd700' : '#39ff14', color: score >= 40 && score < 70 ? '#000' : '#fff' }}>
-                {formatScore(score)}
-              </span>
-              <span className="text-xs sm:text-sm font-mono text-ds-silver/40 uppercase tracking-widest font-black">AACS Score</span>
-            </div>
           </BrutalCard>
         </div>
 
         {/* --- Image Advanced Analysis Block --- */}
         {result.file_type && result.file_type.includes('image') && result.forensics?.ela && (
-          <div className="result-section w-full">
+          <div className="space-y-6 result-section">
             <ElaHeatmapViewer
               elaData={result.forensics.ela}
               imageFile={originalFile}
-              systemScore={score}
-              systemVerdict={verdict}
+              onScoreComputed={setLocalElaScore}
             />
           </div>
         )}
@@ -199,6 +200,8 @@ export default function Result() {
           <div className="space-y-6 w-full flex flex-col">
             {/* Key Findings */}
             {result.findings?.length > 0 && <KeyFindings findings={result.findings} />}
+            {/* Sub-Scores */}
+            {result.sub_scores && <SubScoreGrid subScores={result.sub_scores} />}
             {/* Sub-Scores */}
             {result.sub_scores && <SubScoreGrid subScores={result.sub_scores} />}
             <CdcfPanel cdcf={result.cdcf} />

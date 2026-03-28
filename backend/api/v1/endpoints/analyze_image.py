@@ -45,7 +45,8 @@ async def process_and_update(
             status="done",
             ai_score=result["score"],
             verdict=result["verdict"],
-            signals=result["signals"],
+            # Store context verification inside signals to avoid schema changes
+            signals={**result["signals"], "context_verification_layer": result["explainability"].get("context_verification")},
             regions_json=result["explainability"].get("regions", []),
             heatmap_base64=result["explainability"]["ela_base64_heatmap_prefix"],
             explainability_text=result["explainability"]["text"]
@@ -130,7 +131,8 @@ def get_scan_result(job_id: str, db: Session = Depends(get_db)):
             "explainability": {
                 "text": scan.explainability_text,
                 "ela_base64_heatmap_prefix": scan.heatmap_base64,
-                "regions": scan.regions_json
+                "regions": scan.regions_json,
+                "context_verification": scan.signals.get("context_verification_layer") if scan.signals else None
             }
         }
     }
