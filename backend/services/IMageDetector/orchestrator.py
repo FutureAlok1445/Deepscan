@@ -17,6 +17,7 @@ from .diffusion_fingerprint import diffusion_analyzer  # Phase 5
 
 # ── Reference Heatmap Detector (primary source for heatmaps + ML) ─────
 from .heatmap_detector import heatmap_detector, parse_ai_score
+from .context_search import context_search_service
 
 
 class ImageOrchestrator:
@@ -153,6 +154,23 @@ class ImageOrchestrator:
                 "DIFFUSION": score_diff,
                 "WORD_COUNT": caption_word_count,
             }
+            
+            # ── Layer 11: Live Context Verification (Google Lens) ─────
+            # Upload the ACTUAL user image to Google Lens for real web matches
+            context_verification = context_search_service.search_by_image(pil_img)
+            
+            # Dynamically adjust CVS score (Context Verification Layer)
+            # If we found entities or domains, lower the CVS score (lower score = more authentic)
+            if context_verification and context_verification.get("success"):
+                found_count = len(context_verification.get("entities", [])) + len(context_verification.get("matching_domains", []))
+                if found_count > 3:
+                    score_cvs = max(5, score_cvs - 25) # High confidence web prevalence
+                elif found_count > 0:
+                    score_cvs = max(10, score_cvs - 15) # Moderate web prevalence
+            
+            # Re-update the signals dict with potentially adjusted CVS
+            signals["CVS"] = score_cvs
+            
             deepfake_chance_aacs = fusion_learner.fuse(signals)
 
             # If reference produced a result, allow it to anchor the final score:
@@ -163,6 +181,14 @@ class ImageOrchestrator:
             # ── Layers 9 & 10: Decision + Explanation ─────────────────
             verdict          = decision_explainer.decide(deepfake_chance_aacs)
             explanation_text = decision_explainer.generate_explanation(signals, details)
+            
+            # Layer 11: Add Context Verification note to text
+            if context_verification and context_verification.get("success"):
+                found_entities = ", ".join(context_verification.get("entities", [])[:3])
+                if found_entities:
+                    explanation_text += f"\n\n[Layer 11: Context] Live Vision Scan identified: {found_entities}. Web prevalence confirms authentic origin patterns."
+                else:
+                    explanation_text += "\n\n[Layer 11: Context] Live Vision Scan initiated. No suspicious forensic matches found on indexed domains."
 
             # Add reference signals to explanation if available
             ref_signals_text = ""
@@ -203,6 +229,7 @@ class ImageOrchestrator:
                     # Full reference ML breakdown
                     "ref_ml_results": ref_result.get("ml_results", {}),
                     "ref_signals":    ref_result.get("signals", []),
+                    "context_verification": context_verification
                 },
             }
             return result

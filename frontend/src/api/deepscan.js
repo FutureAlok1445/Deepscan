@@ -355,6 +355,10 @@ function normalizeImageResult(jobId, scanData, originalFilename) {
       detailed: exp.text || '',
       technical: Object.entries(signals).map(([k,v]) => `${k}=${typeof v === 'number' ? v.toFixed(1) : v}`).join(', '),
     },
+    explainability: {
+      ...exp,
+      context_verification: exp.context_verification || null
+    },
     _isImageResult: true,
   };
   return normalized;
@@ -475,8 +479,13 @@ export async function getResult(id) {
   }
 }
 
-export async function downloadReport(id) {
-  const res = await api.get(`/report/${id}`, { responseType: 'blob' });
+export async function downloadReport(id, overrideScore, overrideVerdict) {
+  const params = new URLSearchParams();
+  if (overrideScore !== undefined) params.append('score', overrideScore);
+  if (overrideVerdict !== undefined) params.append('verdict', overrideVerdict.toUpperCase());
+  
+  const q = params.toString() ? `?${params.toString()}` : '';
+  const res = await api.get(`/report/${id}${q}`, { responseType: 'blob' });
   return res.data;
 }
 
@@ -561,15 +570,46 @@ export async function submitFeedback(args) {
 export async function analyzeText(text, mode = 'ai', language = 'en') {
   const res = await api.post('/analyze/text', { text, mode, language });
   const result = res.data;
+
+  // Normalize: ensure expected fields exist for both display and caching
+  if (!result.score && result.overall_score != null) {
+    result.score = result.overall_score;
+  }
+  if (!result.aacs_score && result.overall_score != null) {
+    result.aacs_score = result.overall_score;
+  }
+  if (!result.created_at) {
+    result.created_at = new Date().toISOString();
+  }
+  if (!result.word_count && text) {
+    result.word_count = text.trim().split(/\s+/).length;
+  }
+
+  // Ensure details.signals and details.reasons exist for the UI
+  if (!result.details) {
+    result.details = {
+      signals: { hf_model: 0, perplexity: 0, burstiness: 0, sapling_api: 0 },
+      reasons: ['Analysis complete.'],
+    };
+  }
+  if (!result.details.signals) {
+    result.details.signals = { hf_model: 0, perplexity: 0, burstiness: 0, sapling_api: 0 };
+  }
+  if (!result.details.reasons) {
+    result.details.reasons = ['Analysis complete.'];
+  }
+
+  // Cache for result page and history
   cacheResult(result.id, result);
   cacheHistoryItem({
     id: result.id,
-    score: result.score ?? result.aacs_score ?? 0,
-    aacs_score: result.aacs_score ?? result.score ?? 0,
+    score: result.overall_score ?? 0,
+    aacs_score: result.overall_score ?? 0,
     verdict: result.verdict,
-    filename: `Text (${result.word_count || 0} words)`,
+    filename: `Text Scan (${result.word_count || 0} words)`,
     file_type: 'text',
     created_at: result.created_at,
   });
+
   return result;
 }

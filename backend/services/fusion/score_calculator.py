@@ -1,46 +1,99 @@
-def calculate_aacs(mas: float, pps: float, irs: float, aas: float, cvs: float,
-                   category: str = "unknown") -> float:
-    """Calculate AACS using adaptive weights based on media type.
-    
-    For audio files, PPS (heartbeat) and CVS (reverse image search) are not
-    applicable, so their weight is redistributed to the engines that ARE relevant.
-    For images, PPS and AAS may not apply. For video, all engines apply.
-    
-    The primary detector (MAS) always gets the highest weight. When both MAS and
-    AAS point the same direction for audio, confidence is maximal.
+"""
+score_calculator.py — Bulletproof AACS Score Calculator
+
+Handles None/NaN/missing sub-scores by redistributing weights
+to present detectors. NEVER returns NaN. NEVER crashes.
+"""
+import math
+from loguru import logger
+
+
+def calculate_aacs(scores: dict = None, mas: float = None, pps: float = None,
+                   irs: float = None, aas: float = None, cvs: float = None,
+                   category: str = "unknown") -> dict:
+    """Calculate AACS with bulletproof handling of missing/failed detectors.
+
+    Accepts EITHER a scores dict OR individual keyword arguments for
+    backward compatibility with the existing orchestrator.
+
+    Returns a rich result dict (never crashes, never returns NaN).
     """
+    # Normalize input: support both dict and kwargs
+    if scores is None:
+        scores = {}
+    raw = {
+        "MAS": scores.get("MAS", scores.get("mas", mas)),
+        "PPS": scores.get("PPS", scores.get("pps", pps)),
+        "IRS": scores.get("IRS", scores.get("irs", irs)),
+        "AAS": scores.get("AAS", scores.get("aas", aas)),
+        "CVS": scores.get("CVS", scores.get("cvs", cvs)),
+    }
+
     # Base weights per category — primary detector gets strong weight
     if category == "audio":
-        # Audio: MAS + AAS both run 7-sig. Give heavy weight to detection.
-        # IRS only catches metadata issues (usually 0 for clean files)
-        weights = {"mas": 0.50, "aas": 0.40, "irs": 0.10}
-        scores_map = {"mas": mas, "aas": aas, "irs": irs}
+        weights = {"MAS": 0.50, "AAS": 0.40, "IRS": 0.10, "PPS": 0.00, "CVS": 0.00}
     elif category == "image":
-        # Image: MAS (ViT) is primary, IRS (metadata) secondary, CVS (reverse search) tertiary
-        weights = {"mas": 0.60, "irs": 0.25, "cvs": 0.15}
-        scores_map = {"mas": mas, "irs": irs, "cvs": cvs}
+        weights = {"MAS": 0.60, "IRS": 0.25, "CVS": 0.15, "PPS": 0.00, "AAS": 0.00}
     elif category == "video":
-        # Video: all 5 engines, MAS dominates
-        weights = {"mas": 0.35, "pps": 0.20, "irs": 0.15, "aas": 0.15, "cvs": 0.15}
-        scores_map = {"mas": mas, "pps": pps, "irs": irs, "aas": aas, "cvs": cvs}
+        weights = {"MAS": 0.35, "PPS": 0.20, "IRS": 0.15, "AAS": 0.15, "CVS": 0.15}
     else:
-        weights = {"mas": 0.30, "pps": 0.25, "irs": 0.20, "aas": 0.15, "cvs": 0.10}
-        scores_map = {"mas": mas, "pps": pps, "irs": irs, "aas": aas, "cvs": cvs}
+        weights = {"MAS": 0.30, "PPS": 0.25, "IRS": 0.20, "AAS": 0.15, "CVS": 0.10}
 
-    # Weighted sum (weights already sum to ~1.0 per category)
-    total_weight = sum(weights.values())
-    weighted_sum = sum((w / total_weight) * scores_map[k] for k, w in weights.items())
+    # Step 1: Clean and clamp — replace None/NaN with None marker
+    clean = {}
+    for key in weights:
+        val = raw.get(key)
+        if val is None or (isinstance(val, float) and (math.isnan(val) or math.isinf(val))):
+            clean[key] = None  # will redistribute
+        else:
+            clean[key] = max(0.0, min(100.0, float(val)))
 
-    # Confidence boost: if ALL applicable engines agree strongly (>70 or <25), amplify signal
-    vals = list(scores_map.values())
-    if all(v >= 70 for v in vals if v > 0):
-        # All engines say fake — boost by 10%
+    # Step 2: Identify present keys (with non-zero weight)
+    present_keys = [k for k in weights if clean[k] is not None and weights[k] > 0]
+
+    if not present_keys:
+        # ALL detectors failed — return honest uncertain score
+        return {
+            "aacs": 50.0,
+            "verdict": "Uncertain",
+            "confidence": 0.0,
+            "sub_scores": {k: None for k in weights},
+            "detectors_used": [],
+            "fallback_used": True,
+            "warning": "All detectors failed — heuristic fallback"
+        }
+
+    # Step 3: Redistribute missing weight proportionally
+    total_present_weight = sum(weights[k] for k in present_keys)
+    missing_weight = sum(w for k, w in weights.items() if clean[k] is None or weights[k] == 0)
+
+    adjusted_weights = {}
+    for k in present_keys:
+        adjusted_weights[k] = weights[k] + (weights[k] / total_present_weight * missing_weight)
+
+    # Step 4: Calculate AACS
+    weighted_sum = sum(clean[k] * adjusted_weights[k] for k in present_keys)
+
+    # Confidence boost: if ALL applicable engines agree strongly (>70 or <25), amplify
+    vals = [clean[k] for k in present_keys]
+    if all(v >= 70 for v in vals):
         weighted_sum = min(100.0, weighted_sum * 1.10)
     elif all(v <= 25 for v in vals):
-        # All engines say real — push toward authentic
         weighted_sum = max(0.0, weighted_sum * 0.90)
 
-    return max(0.0, min(100.0, round(weighted_sum, 2)))
+    aacs = max(0.0, min(100.0, round(weighted_sum, 2)))
+
+    # Step 5: Verdict bands
+    verdict = get_verdict(aacs)
+
+    return {
+        "aacs": aacs,
+        "verdict": verdict,
+        "confidence": round(total_present_weight, 2),
+        "sub_scores": {k: round(clean[k], 2) if clean[k] is not None else None for k in weights},
+        "detectors_used": present_keys,
+        "fallback_used": len(present_keys) < sum(1 for w in weights.values() if w > 0),
+    }
 
 
 def get_verdict(aacs: float) -> str:

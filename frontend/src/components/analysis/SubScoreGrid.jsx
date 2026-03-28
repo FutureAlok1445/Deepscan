@@ -12,36 +12,35 @@ const ICON_MAP = {
 
 export default function SubScoreGrid({ subScores = {} }) {
   return (
-    <div className="space-y-3">
-      <h3 className="font-grotesk font-bold text-ds-silver text-lg uppercase tracking-wider">
-        Sub-Scores
-      </h3>
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+    <div className="space-y-2">
+      <div className="flex items-center gap-2 mb-2">
+        <div className="w-1 h-4 bg-ds-red" />
+        <h3 className="font-grotesk font-bold text-ds-silver text-sm uppercase tracking-wider">
+          Forensic Sub-Scores
+        </h3>
+      </div>
+      <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-4 gap-2">
         {SUB_SCORES.map(({ key, label, icon }) => {
           const value = subScores[key];
           const Icon = ICON_MAP[icon] || Globe;
           const hex = getScoreHex(value);
 
           return (
-            <BrutalCard key={key} hover={false} className="!p-4 text-center space-y-2">
-              <Icon className="w-6 h-6 mx-auto" style={{ color: hex }} />
-              <p className="text-xs font-mono text-ds-silver/80 uppercase tracking-wider font-bold">
-                {label}
-              </p>
-              <p className="text-2xl font-grotesk font-black drop-shadow-md" style={{ color: hex }}>
-                {value != null ? `${value}%` : '—'}
-              </p>
-              {/* Mini bar */}
-              <div className="h-1.5 bg-ds-silver/20 rounded-full overflow-hidden">
-                <div
-                  className="h-full rounded-full transition-all duration-700"
-                  style={{ width: `${value ?? 0}%`, backgroundColor: hex }}
-                />
+            <div key={key} className="bg-ds-bg/50 border border-ds-silver/10 p-2 sm:p-3 flex items-center gap-3">
+              <Icon className="w-4 h-4 flex-shrink-0" style={{ color: hex }} />
+              <div className="flex-1 min-w-0">
+                <p className="text-[9px] font-mono text-ds-silver/40 uppercase truncate">
+                  {label}
+                </p>
+                <p className="text-sm font-grotesk font-black" style={{ color: hex }}>
+                  {value != null ? `${value}%` : '—'}
+                </p>
               </div>
-            </BrutalCard>
+            </div>
           );
         })}
       </div>
     </div>
   );
 }
+

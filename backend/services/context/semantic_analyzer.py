@@ -1,7 +1,15 @@
 import asyncio
 import base64
-import cv2
 from loguru import logger
+
+HAS_CV2 = False
+try:
+    import cv2
+    HAS_CV2 = True
+except ImportError:
+    cv2 = None
+    logger.warning("cv2 not installed — SemanticAnalyzer image encoding will use PIL fallback")
+
 from backend.config import settings
 
 

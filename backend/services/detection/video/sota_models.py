@@ -1,12 +1,34 @@
-import torch
-import torch.nn as nn
-from torchvision import models, transforms
-import timm
-from timm import create_model
 from loguru import logger
-import cv2
-import numpy as np
 from typing import List, Dict
+
+HAS_TORCH = False
+HAS_CV2 = False
+HAS_TIMM = False
+
+try:
+    import torch
+    import torch.nn as nn
+    from torchvision import models, transforms
+    HAS_TORCH = True
+except ImportError:
+    logger.warning("torch/torchvision not installed — SOTA models disabled")
+
+try:
+    import timm
+    from timm import create_model
+    HAS_TIMM = True
+except ImportError:
+    logger.warning("timm not installed — MesoNet/Xception detectors disabled")
+
+try:
+    import cv2
+    import numpy as np
+    HAS_CV2 = True
+except ImportError:
+    import types
+    np = types.SimpleNamespace(ndarray=object, mean=lambda x: 50.0)
+    logger.warning("cv2/numpy not installed — SOTA frame analysis disabled")
+
 
 class MesoNet4Detector:
     '''
@@ -14,8 +36,11 @@ class MesoNet4Detector:
     Lightweight CNN for spatial artifacts.
     '''
     def __init__(self):
+        self.model = None
+        if not HAS_TORCH or not HAS_TIMM or not HAS_CV2:
+            logger.warning("MesoNet4Detector: Missing dependencies — disabled")
+            return
         try:
-            # Fallback to xception if mesonet is unavailable in timm
             model_name = 'mesonet' if 'mesonet' in timm.list_models() else 'xception'
             if model_name == 'xception':
                 logger.warning("MesoNet not found in timm, falling back to Xception architecture")
@@ -33,8 +58,8 @@ class MesoNet4Detector:
             logger.error(f'MesoNet load failed: {e}')
             self.model = None
 
-    def predict(self, frame: np.ndarray) -> Dict[str, float]:
-        if self.model is None:
+    def predict(self, frame) -> Dict[str, float]:
+        if self.model is None or not HAS_CV2:
             return {'score': 50.0, 'confidence': 0.0}
         try:
             rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
@@ -50,6 +75,10 @@ class XceptionDetector:
     XceptionNet: 95% FF++ accuracy. Face forensics CNN.
     '''
     def __init__(self):
+        self.model = None
+        if not HAS_TORCH or not HAS_TIMM or not HAS_CV2:
+            logger.warning("XceptionDetector: Missing dependencies — disabled")
+            return
         try:
             self.model = create_model('xception', pretrained=True, num_classes=2)
             self.model.eval()
@@ -65,8 +94,8 @@ class XceptionDetector:
             logger.error(f'Xception load failed: {e}')
             self.model = None
 
-    def predict(self, frame: np.ndarray) -> Dict[str, float]:
-        if self.model is None:
+    def predict(self, frame) -> Dict[str, float]:
+        if self.model is None or not HAS_CV2:
             return {'score': 50.0, 'confidence': 0.0}
         try:
             rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
@@ -82,12 +111,23 @@ def ensemble_sota(scores: List[Dict]) -> Dict[str, float]:
     '''Weighted fusion: Meso 0.4, Xception 0.3.'''
     if not scores:
         return {'score': 50.0, 'confidence': 0.0}
-    avg_score = np.mean([s['score'] for s in scores])
-    avg_conf = np.mean([s['confidence'] for s in scores])
-    return {'score': float(avg_score), 'confidence': float(avg_conf)}
+    try:
+        import numpy as _np
+        avg_score = _np.mean([s['score'] for s in scores])
+        avg_conf = _np.mean([s['confidence'] for s in scores])
+        return {'score': float(avg_score), 'confidence': float(avg_conf)}
+    except Exception:
+        # Pure Python fallback
+        vals = [s['score'] for s in scores]
+        confs = [s['confidence'] for s in scores]
+        return {'score': sum(vals)/len(vals), 'confidence': sum(confs)/len(confs)}
 
-sota_ensemble = {
-    'mesonet4': MesoNet4Detector(),
-    'xception': XceptionDetector()
-}
-
+# Only instantiate if dependencies are available
+if HAS_TORCH and HAS_TIMM and HAS_CV2:
+    sota_ensemble = {
+        'mesonet4': MesoNet4Detector(),
+        'xception': XceptionDetector()
+    }
+else:
+    sota_ensemble = {}
+    logger.warning("SOTA ensemble models not loaded — dependencies missing")
