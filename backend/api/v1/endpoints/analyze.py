@@ -1,5 +1,7 @@
 import asyncio
 import math
+import base64
+import io
 from fastapi import APIRouter, UploadFile, File, Request, HTTPException
 from fastapi.responses import JSONResponse
 from loguru import logger
@@ -76,16 +78,33 @@ async def analyze_file(request: Request, file: UploadFile = File(...)):
             
             # Map the response into the format expected by the frontend Result page
             analysis_id = str(uuid.uuid4())
+            
+            # Read image as base64 to ensure frontend can display it (since we delete the temp file)
+            with open(file_path, "rb") as f:
+                img_data = f.read()
+                img_b64 = base64.b64encode(img_data).decode('utf-8')
+                image_url = f"data:{mime_type};base64,{img_b64}"
+
             result = {
                 "id": analysis_id,
                 "status": "complete",
-                "aacs_score": res["score"],
-                "score": res["score"],
-                "verdict": res["verdict"],
+                "aacs_score": res.get("score", 0),
+                "score": res.get("score", 0),
+                "verdict": res.get("verdict", "UNCERTAIN"),
                 "file_type": mime_type,
                 "original_filename": file.filename,
+                "original_image_url": image_url,
                 "findings": [{"engine": k, "score": v, "detail": f"{k} analyzed this layer"} for k, v in res.get("signals", {}).items()],
-                "image_data": res, # Retain full 10-layer output
+                "image_data": {
+                    "signals": res.get("signals", {}),
+                    "explainability": res.get("explainability", {})
+                },
+                "forensics": {
+                    "ela": {
+                        **res.get("explainability", {}),
+                        "image_url": image_url # Vital for ElaHeatmapViewer
+                    }
+                },
                 "cdcf": {
                     "fusion_method": "10-Layer AI Fusion Stack",
                     "confidence": 95,

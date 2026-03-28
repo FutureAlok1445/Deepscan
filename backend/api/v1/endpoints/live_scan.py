@@ -61,7 +61,7 @@ async def websocket_endpoint(websocket: WebSocket):
                 else:
                     score = 50.0
 
-                verdict = "AUTHENTIC" if score <= 30 else "UNCERTAIN" if score <= 60 else "LIKELY_FAKE" if score <= 85 else "DEFINITELY_FAKE"
+                verdict = "AUTHENTIC" if score <= 34 else "PARTIALLY_AI" if score <= 70 else "LIKELY_FAKE" if score <= 85 else "DEFINITELY_FAKE"
 
                 await websocket.send_json({
                     "frame": frame_count,

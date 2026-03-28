@@ -122,7 +122,7 @@ export default function History() {
         ) : (
           <div className="space-y-3">
             {filtered.map((item) => {
-              const verdict = VERDICT_CONFIG[item.verdict] || VERDICT_CONFIG.UNCERTAIN;
+              const verdict = VERDICT_CONFIG[item.verdict] || VERDICT_CONFIG.PARTIALLY_AI;
               return (
                 <Link
                   key={item.id}

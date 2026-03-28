@@ -112,13 +112,21 @@ export default function ArbitrationSystem({ imageFile, backendScore, onComplete 
     const addLog = (model, text, color) =>
         setLogs(prev => [...prev, { model, text, color }]);
 
-    const toBase64 = (file) =>
-        new Promise((resolve, reject) => {
+    const toBase64 = (file) => {
+        if (typeof file === 'string') {
+            // If already a data URL, strip the prefix
+            if (file.startsWith('data:')) {
+                return file.split(',')[1] || '';
+            }
+            return file;
+        }
+        return new Promise((resolve, reject) => {
             const reader = new FileReader();
             reader.readAsDataURL(file);
             reader.onload = () => resolve(reader.result.split(',')[1] || '');
             reader.onerror = reject;
         });
+    };
 
     // Wait for window.puter with retries
     const waitForPuter = () =>
@@ -196,10 +204,11 @@ export default function ArbitrationSystem({ imageFile, backendScore, onComplete 
             setStatusLine('🔍 Claude 3.5 Sonnet scanning for AI regions...');
             let claudeData = null;
             try {
+                const imageSource = typeof file === 'string' ? file : `data:${file.type || 'image/jpeg'};base64,${base64}`;
                 const claudeRes = await window.puter.ai.chat(
                     [{
                         role: 'user', content: [
-                            { type: 'image_url', image_url: { url: `data:${file.type || 'image/jpeg'};base64,${base64}` } },
+                            { type: 'image_url', image_url: { url: imageSource } },
                             { type: 'text', text: `EXIF Data extracted: ${exifText}\n\n${CLAUDE_FORENSIC_PROMPT}` }
                         ]
                     }],

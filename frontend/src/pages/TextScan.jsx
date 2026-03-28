@@ -181,7 +181,7 @@ export default function TextScan() {
 function TextResult({ result }) {
   const sectionRef = useRef(null);
   const score = result.score ?? result.aacs_score ?? 0;
-  const verdictConf = VERDICT_CONFIG[result.verdict] || VERDICT_CONFIG.UNCERTAIN;
+  const verdictConf = VERDICT_CONFIG[result.verdict] || VERDICT_CONFIG.PARTIALLY_AI;
 
   useEffect(() => {
     if (!sectionRef.current) return;

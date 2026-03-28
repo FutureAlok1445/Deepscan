@@ -55,7 +55,7 @@ class VideoOrchestrator:
                 cap.release()
                 return 50.0, {
                     "nlm_report": "Deepscan aborted: The video contains fewer than 2 readable frames. Try re-encoding as H.264 MP4."
-                }, []
+                }, [], None
 
             # Sample frames evenly
             frame_indices = np.linspace(0, total - 1, target_frames, dtype=int)
@@ -71,7 +71,7 @@ class VideoOrchestrator:
             cap.release()
 
             if len(frames) < 10:
-                return 50.0, {"nlm_report": "Analysis failed: Not enough frames could be decoded."}, []
+                return 50.0, {"nlm_report": "Analysis failed: Not enough frames could be decoded."}, [], None
 
             # ── 3. Optimized AI/Forensic Engine Execution (Concurrent) ──
             # passing the SAME frame pool to all engines to avoid redundant reads
@@ -217,17 +217,11 @@ class VideoOrchestrator:
 
             ltca_data["advanced_findings"] = advanced_findings
 
-            # ── 9. Await content description (runs concurrently with scoring) ──
-            try:
-                video_description = await description_task
-                ltca_data["video_description"] = video_description
-            except Exception as desc_err:
-                logger.warning(f"VideoDescriber task failed: {desc_err}")
-                ltca_data["video_description"] = {"description": "Content analysis unavailable.", "moments": []}
-
-            return final_mas, ltca_data, frames
+            # ── 9. Return description task to be awaited concurrently by parent ──
+            # The parent orchestrator will await the description_task alongside frame analysis
+            return final_mas, ltca_data, frames, description_task
 
         except Exception as e:
             logger.error(f"VideoOrchestrator pipeline failed: {e}")
             import traceback; traceback.print_exc()
-            return 50.0, {"nlm_report": "Forensic analysis failed due to an internal error."}, []
+            return 50.0, {"nlm_report": "Forensic analysis failed due to an internal error."}, [], None

@@ -55,7 +55,7 @@ async def main():
         
         # 3. Process the video
         logger.info("Running video through the full analytical pipeline...")
-        mas_score, ltca_data = await orchestrator.process_video(video_file, num_frames=12)
+        mas_score, ltca_data, frames, description_task = await orchestrator.process_video(video_file, num_frames=12)
         
         # 4. Output results
         logger.info("=== TEST RESULTS ===")

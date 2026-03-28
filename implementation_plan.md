@@ -20,6 +20,47 @@ Extend `ltca_data.advanced_findings[]`:
 }
 ```
 
+### Frontend - Dashboard Sync
+#### [MODIFY] [Result.jsx](file:///c:/py%20project%20sem%204/Deepfake%20Main/Deepscan/frontend/src/pages/Result.jsx)
+- Remove duplicate imports and fix syntax errors (already partially done, verifying).
+
+#### [MODIFY] [ImageResultDashboard.jsx](file:///c:/py%20project%20sem%204/Deepfake%20Main/Deepscan/frontend/src/components/analysis/ImageResultDashboard.jsx)
+- Add "Forensic AI Report" tab to show Qwen's forensic analysis, bringing it to parity with the video dashboard.
+
+### Backend - Stability
+#### [MODIFY] [sota_models.py](file:///c:/py%20project%20sem%204/Deepfake%20Main/Deepscan/backend/services/detection/video/sota_models.py)
+- Fix `mesonet` loading by falling back to `xception` or `efficientnet` if not found in `timm`.
+
+### Browser Extension - Screenshot Analysis
+#### [MODIFY] [manifest.json](file:///c:/py%20project%20sem%204/Deepfake%20Main/Deepscan/extension/manifest.json)
+- Add `"<all_urls>"` to `host_permissions` and `content_scripts`.
+- Add `"tabs"` to `permissions`.
+
+#### [MODIFY] [content.js](file:///c:/py%20project%20sem%204/Deepfake%20Main/Deepscan/extension/content.js) & [content.css](file:///c:/py%20project%20sem%204/Deepfake%20Main/Deepscan/extension/content.css)
+- Inject a floating action button (FAB) on all pages.
+- When clicked, send a message to the background script to capture the screen.
+
+#### [MODIFY] [background.js](file:///c:/py%20project%20sem%204/Deepfake%20Main/Deepscan/extension/background.js)
+- Listen for the screenshot trigger message.
+- Use `chrome.tabs.captureVisibleTab` to capture the current screen to a data URL.
+- Convert the data URL to a File/Blob and `POST` it to the backend's `/api/v1/analyze` endpoint.
+- Open a new tab to `http://localhost:5173/analysis/<uuid>` using the ID returned by the backend.
+
+## Verification Plan
+
+### Automated Tests
+- Run `python test_lmstudio.py` to confirm model connectivity.
+- Run `npm run build` in `frontend/` to ensure no more identifier errors.
+- Check backend logs for model loading success.
+
+### Manual Verification
+- Upload an image.
+- Verify that a forensic description appears in the "Forensic AI Report" (or "Diagnostic Conclusion") and that it reflects the output from LM Studio.
+- Verify that the "Forensic Radar" continues to show the ELA heatmap correctly.
+- Reload the extension in `chrome://extensions`.
+- Open any webpage, click the new Deepscan floating button.
+- Verify that a new tab opens and shows the analysis results for that screenshot.
+
 ## Files
 
 New: 2. Modified: 4.

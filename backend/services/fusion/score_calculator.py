@@ -44,10 +44,10 @@ def calculate_aacs(mas: float, pps: float, irs: float, aas: float, cvs: float,
 
 
 def get_verdict(aacs: float) -> str:
-    if aacs <= 30: return "AUTHENTIC"
-    elif aacs <= 60: return "UNCERTAIN"
+    if aacs <= 34: return "AUTHENTIC"
+    elif aacs <= 70: return "PARTIALLY_AI"
     elif aacs <= 85: return "LIKELY_FAKE"
     else: return "DEFINITELY_FAKE"
 
 def get_verdict_color(verdict: str) -> str:
-    return {"AUTHENTIC": "green", "UNCERTAIN": "yellow", "LIKELY_FAKE": "orange", "DEFINITELY_FAKE": "red"}.get(verdict, "gray")
+    return {"AUTHENTIC": "green", "PARTIALLY_AI": "yellow", "LIKELY_FAKE": "orange", "DEFINITELY_FAKE": "red"}.get(verdict, "gray")

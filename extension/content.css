@@ -92,3 +92,35 @@
     51% { left: auto; right: 0; }
     100% { width: 0%; left: auto; right: 0; }
 }
+
+/* Screenshot FAB */
+.deepscan-screenshot-btn {
+    position: fixed;
+    bottom: 30px;
+    right: 30px;
+    width: 60px;
+    height: 60px;
+    border-radius: 50%;
+    background-color: #00f5ff;
+    color: #0f0f1a;
+    border: 3px solid #0f0f1a;
+    box-shadow: 4px 4px 0px rgba(0,0,0,0.8);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    z-index: 999999;
+    transition: all 0.2s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+}
+
+.deepscan-screenshot-btn:hover {
+    transform: translate(-2px, -2px);
+    box-shadow: 6px 6px 0px rgba(0,0,0,0.8);
+    background-color: #00e0eb;
+}
+
+.deepscan-screenshot-btn:active {
+    transform: translate(2px, 2px);
+    box-shadow: 2px 2px 0px rgba(0,0,0,0.8);
+}
+
