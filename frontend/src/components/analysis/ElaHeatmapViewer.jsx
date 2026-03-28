@@ -174,7 +174,7 @@ export default function ElaHeatmapViewer({ elaData, imageFile, onScoreComputed }
         if (!active) return;
         setLoadedImg(origImgObj);
 
-        // Scale appropriately for rendering constraints
+        // Scale appropriately for rendering constraints (maintaining original 840px width cap for score consistency)
         const maxW = Math.min(origImgObj.width, 840);
         const sc = maxW / origImgObj.width;
         const W = Math.round(origImgObj.width * sc); 
@@ -332,7 +332,7 @@ export default function ElaHeatmapViewer({ elaData, imageFile, onScoreComputed }
       )}
 
       {/* Canvas */}
-      <div className="relative bg-[#000] w-full max-h-[600px] flex items-center justify-center overflow-hidden">
+      <div className="relative bg-[#000] w-full h-[400px] sm:h-[600px] flex items-center justify-center overflow-hidden">
         {loading && (
           <div className="absolute inset-0 flex items-center justify-center bg-[#1a1a1a] z-10">
             <div className="flex flex-col items-center gap-3">
@@ -343,7 +343,7 @@ export default function ElaHeatmapViewer({ elaData, imageFile, onScoreComputed }
         )}
         <canvas
           ref={canvasRef}
-          className="block w-full h-auto object-contain"
+          className="max-w-full max-h-full object-contain block mx-auto"
           style={{ imageRendering: 'auto' }}
         />
       </div>
