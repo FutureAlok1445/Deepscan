@@ -215,7 +215,8 @@ def _build_prompt(filename: str, num_frames: int) -> str:
         "templates — write as a senior analyst submitting their findings report. Be specific: "
         "reference the frame index, describe artefact locations, and state your confidence level.\n\n"
         "Conclude with your final verdict — AUTHENTIC, SUSPICIOUS, LIKELY SYNTHETIC, or "
-        "CONFIRMED SYNTHETIC — and cite the two strongest pieces of forensic evidence."
+        "CONFIRMED SYNTHETIC — and cite the two strongest pieces of forensic evidence. "
+        "Crucially, you MUST also mandate a strict confidence percentage in the exact format: 'AI_PROBABILITY: [0-100]%'."
     )
 
 
@@ -245,10 +246,12 @@ async def _call_qwen(client, model: str, prompt: str, image_parts: list) -> str:
 
 def _build_result(raw_text: str) -> dict:
     verdict = _extract_verdict(raw_text)
+    ai_prob = _extract_ai_probability(raw_text)
     return {
         "description":    raw_text,
         "raw_mode":       True,
         "verdict":        verdict,
+        "ai_probability": ai_prob,
         "verdict_detail": "",
         "setting":        "Unknown",
         "people":         "Unknown",
@@ -278,6 +281,17 @@ def _extract_verdict(text: str) -> str:
     return "UNKNOWN"
 
 
+def _extract_ai_probability(text: str) -> float:
+    match = re.search(r"AI_PROBABILITY:\s*(\d+(?:\.\d+)?)%?", text, re.IGNORECASE)
+    if match:
+        try:
+            val = float(match.group(1))
+            return min(100.0, max(0.0, val))
+        except ValueError:
+            pass
+    return 50.0
+
+
 def _unavailable() -> dict:
     return {
         "description":    (
@@ -286,6 +300,7 @@ def _unavailable() -> dict:
         ),
         "raw_mode":       True,
         "verdict":        "UNKNOWN",
+        "ai_probability": 50.0,
         "verdict_detail": "",
         "setting":        "N/A",
         "people":         "N/A",

@@ -229,6 +229,20 @@ class DetectionOrchestrator:
                     try:
                         video_description = await description_task
                         ltca_data["video_description"] = video_description
+                        
+                        # --- Qwen AI Percentage Integration ---
+                        qwen_prob = video_description.get("ai_probability")
+                        if qwen_prob is not None and qwen_prob != 50.0:
+                            # We blend the Qwen extracted probability directly into the main spatial score
+                            logger.info(f"Qwen VLM returned AI_PROBABILITY: {qwen_prob}%")
+                            # weight: 50% Qwen, 50% existing Spatio-Temporal MAS score
+                            score = (score * 0.5) + (qwen_prob * 0.5)
+                            
+                            findings.append({
+                                "engine": "Qwen-Vision-Language-Model",
+                                "score": round(qwen_prob, 1),
+                                "detail": f"AI Expert System analyzed frames and estimated {qwen_prob}% probability of synthetic manipulation."
+                            })
                     except Exception as desc_err:
                         logger.warning(f"VideoDescriber task failed: {desc_err}")
                         ltca_data["video_description"] = {"description": "Content analysis unavailable.", "moments": []}
