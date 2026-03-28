@@ -1,4 +1,4 @@
-﻿import { Routes, Route, useLocation } from 'react-router-dom'
+import { Routes, Route, useLocation } from 'react-router-dom'
 import { Toaster } from 'react-hot-toast'
 import { useState, useEffect, lazy, Suspense } from 'react'
 import Navbar from './components/layout/Navbar'

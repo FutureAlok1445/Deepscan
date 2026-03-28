@@ -1,9 +1,25 @@
-import torch
 import math
 import numpy as np
 import httpx
 from loguru import logger
-from transformers import GPT2LMHeadModel, GPT2Tokenizer
+
+HAS_TORCH = False
+HAS_TRANSFORMERS = False
+
+try:
+    import torch
+    HAS_TORCH = True
+except ImportError:
+    logger.warning("torch not installed — TextDetector perplexity analysis disabled")
+
+try:
+    from transformers import GPT2LMHeadModel, GPT2Tokenizer
+    HAS_TRANSFORMERS = True
+except ImportError:
+    GPT2LMHeadModel = None
+    GPT2Tokenizer = None
+    logger.warning("transformers not installed — TextDetector GPT-2 disabled")
+
 from backend.utils.hf_api import query_huggingface
 from backend.config import settings
 
@@ -27,6 +43,9 @@ class TextDetector:
             logger.error(f"TextDetector pre-load failed: {e}")
 
     def _load_gpt2(self):
+        if not HAS_TORCH or not HAS_TRANSFORMERS:
+            logger.debug("GPT-2 load skipped — torch or transformers not installed")
+            return False
         if self._gpt2_model is not None:
             return True
         if self._loading_gpt2:
@@ -184,8 +203,8 @@ class TextDetector:
         return float(variance)
 
     async def _get_sapling_score(self, text: str) -> float:
-        if not self.sapling_api_key or self.sapling_api_key.startswith("W"): # Still using placeholder
-            pass 
+        if not self.sapling_api_key or self.sapling_api_key in ("", "YOUR_SAPLING_KEY_HERE"):
+            pass  # No valid key — skip API call
         else:
             try:
                 async with httpx.AsyncClient() as client:

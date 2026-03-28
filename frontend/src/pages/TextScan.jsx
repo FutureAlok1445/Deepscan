@@ -8,7 +8,6 @@ import gsap from 'gsap';
 import BrutalCard from '../components/ui/BrutalCard';
 import BrutalButton from '../components/ui/BrutalButton';
 import { analyzeText } from '../api/deepscan';
-import { VERDICT_CONFIG } from '../utils/constants';
 
 const SAMPLE_TEXTS = [
   {
@@ -23,6 +22,21 @@ const SAMPLE_TEXTS = [
 
 const CHAR_LIMIT = 50000;
 const MIN_WORDS = 5;
+
+// Map backend verdicts to display config
+function getVerdictConfig(verdict, score) {
+  const v = (verdict || '').toLowerCase();
+  if (v.includes('definitely') || v.includes('definite') || score >= 82) {
+    return { label: verdict || 'Definitely AI', color: '#ff3c00', emoji: '🚨' };
+  }
+  if (v.includes('likely') || score >= 60) {
+    return { label: verdict || 'Likely AI', color: '#ff8c00', emoji: '🔶' };
+  }
+  if (v.includes('uncertain') || v.includes('error') || (score >= 30 && score < 60)) {
+    return { label: verdict || 'Uncertain', color: '#ffd700', emoji: '⚠️' };
+  }
+  return { label: verdict || 'Human Written', color: '#39ff14', emoji: '✅' };
+}
 
 export default function TextScan() {
   const [text, setText] = useState('');
@@ -128,7 +142,7 @@ export default function TextScan() {
             <textarea
               value={text}
               onChange={(e) => { if (e.target.value.length <= CHAR_LIMIT) setText(e.target.value); }}
-              placeholder="Paste or type text here to analyze...&#10;&#10;Minimum 5 words required for accurate detection."
+              placeholder={"Paste or type text here to analyze...\n\nMinimum 5 words required for accurate detection."}
               rows={8}
               className="w-full bg-transparent px-3 sm:px-4 py-3 font-mono text-sm text-ds-silver placeholder:text-ds-silver/20 focus:outline-none resize-y min-h-[160px] sm:min-h-[200px]"
               disabled={status === 'analyzing'}
@@ -180,8 +194,12 @@ export default function TextScan() {
 /* ─── Result Display ─── */
 function TextResult({ result }) {
   const sectionRef = useRef(null);
-  const score = result.score ?? result.aacs_score ?? 0;
-  const verdictConf = VERDICT_CONFIG[result.verdict] || VERDICT_CONFIG.UNCERTAIN;
+  // Handle both response shapes
+  const score = result.overall_score ?? result.score ?? result.aacs_score ?? 0;
+  const verdictConf = getVerdictConfig(result.verdict, score);
+  const signals = result.details?.signals || {};
+  const reasons = result.details?.reasons || [];
+  const executionTime = result.execution_time ?? (result.processing_time_ms ? result.processing_time_ms / 1000 : 0);
 
   useEffect(() => {
     if (!sectionRef.current) return;
@@ -196,13 +214,28 @@ function TextResult({ result }) {
       {/* Score Card */}
       <BrutalCard className="tr-card text-center !py-6 sm:!py-8">
         <div className="relative inline-block mb-3 sm:mb-4">
-          <div
-            className="text-5xl sm:text-7xl font-grotesk font-black"
-            style={{ color: verdictConf.color }}
-          >
-            {Math.round(score)}%
+          <div className="relative w-40 h-40 sm:w-48 sm:h-48 flex items-center justify-center mx-auto">
+            <svg className="w-full h-full transform -rotate-90">
+              <circle cx="50%" cy="50%" r="45%" fill="transparent" stroke="rgba(255,255,255,0.05)" strokeWidth="8" />
+              <circle
+                cx="50%" cy="50%" r="45%"
+                fill="transparent"
+                stroke={verdictConf.color}
+                strokeWidth="8"
+                strokeDasharray={`${(score / 100) * 283} 283`}
+                strokeLinecap="round"
+                style={{ transition: 'stroke-dasharray 1.5s ease-out' }}
+              />
+            </svg>
+            <div className="absolute inset-0 flex flex-col items-center justify-center">
+              <span className="text-4xl sm:text-5xl font-grotesk font-black" style={{ color: verdictConf.color }}>
+                {Math.round(score)}%
+              </span>
+              <span className="text-[10px] font-mono text-ds-silver/40 uppercase tracking-widest mt-1">
+                AI Probability
+              </span>
+            </div>
           </div>
-          <p className="text-xs font-mono text-ds-silver/50 mt-1">AI Probability</p>
         </div>
         <div
           className="inline-flex items-center gap-2 px-4 py-2 border-3 font-grotesk font-bold text-sm sm:text-base uppercase"
@@ -210,17 +243,58 @@ function TextResult({ result }) {
         >
           {verdictConf.emoji} {verdictConf.label}
         </div>
-        <p className="mt-3 sm:mt-4 text-xs sm:text-sm font-mono text-ds-silver/60 max-w-lg mx-auto px-2">
-          {result.narrative?.summary || ''}
-        </p>
         <div className="mt-3 flex flex-wrap justify-center gap-4 text-xs font-mono text-ds-silver/40">
-          <span>{result.word_count} words</span>
-          <span>{result.sentence_count} sentences</span>
-          <span>{result.processing_time_ms}ms</span>
+          <span>{result.word_count || '—'} words</span>
+          <span>{executionTime.toFixed(2)}s analysis</span>
         </div>
       </BrutalCard>
 
-      {/* Sentence Breakdown */}
+      {/* Signal Bars */}
+      {Object.keys(signals).length > 0 && (
+        <BrutalCard className="tr-card">
+          <h3 className="font-grotesk font-bold text-base sm:text-lg text-ds-silver mb-4 flex items-center gap-2">
+            <Zap className="w-4 h-4 sm:w-5 sm:h-5 text-ds-cyan" />
+            Detection Signals
+          </h3>
+          <div className="space-y-4">
+            {signals.hf_model != null && (
+              <SignalBar label="Model Confidence" value={signals.hf_model} sub="Neural pattern matching" />
+            )}
+            {signals.perplexity != null && (
+              <SignalBar label="Perplexity" value={Math.max(0, 100 - signals.perplexity / 2)} sub="Text predictability (lower = more AI-like)" />
+            )}
+            {signals.burstiness != null && (
+              <SignalBar label="Burstiness" value={Math.max(0, 100 - signals.burstiness)} sub="Sentence variance (lower = more uniform = AI)" />
+            )}
+            {signals.sapling_api != null && (
+              <SignalBar label="AI Consensus" value={signals.sapling_api} sub="Multi-engine LLM detection" />
+            )}
+          </div>
+        </BrutalCard>
+      )}
+
+      {/* Forensic Insights */}
+      {reasons.length > 0 && (
+        <BrutalCard className="tr-card">
+          <h3 className="font-grotesk font-bold text-base sm:text-lg text-ds-silver mb-3 flex items-center gap-2">
+            <Brain className="w-4 h-4 sm:w-5 sm:h-5 text-ds-yellow" />
+            Forensic Insights
+          </h3>
+          <ul className="space-y-2">
+            {reasons.map((reason, idx) => (
+              <li
+                key={idx}
+                className="flex items-center gap-3 text-xs sm:text-sm font-mono text-ds-silver/70"
+              >
+                <div className={`w-1.5 h-1.5 flex-shrink-0 ${score > 60 ? 'bg-ds-red' : score > 30 ? 'bg-ds-yellow' : 'bg-ds-green'}`} />
+                {reason}
+              </li>
+            ))}
+          </ul>
+        </BrutalCard>
+      )}
+
+      {/* Sentence Breakdown (only if available) */}
       {result.sentence_scores?.length > 0 && (
         <BrutalCard className="tr-card">
           <h3 className="font-grotesk font-bold text-base sm:text-lg text-ds-silver mb-3 sm:mb-4 flex items-center gap-2">
@@ -234,17 +308,31 @@ function TextResult({ result }) {
           </div>
         </BrutalCard>
       )}
+    </div>
+  );
+}
 
-      {/* ELI5 */}
-      {result.narrative?.eli5 && (
-        <BrutalCard className="tr-card">
-          <h3 className="font-grotesk font-bold text-base sm:text-lg text-ds-silver mb-2 flex items-center gap-2">
-            <Brain className="w-4 h-4 sm:w-5 sm:h-5 text-ds-yellow" />
-            Simple Explanation
-          </h3>
-          <p className="text-xs sm:text-sm font-mono text-ds-silver/70 leading-relaxed">{result.narrative.eli5}</p>
-        </BrutalCard>
-      )}
+function SignalBar({ label, value, sub }) {
+  const normValue = Math.max(0, Math.min(100, value || 0));
+  const color = normValue >= 70 ? '#ff3c00' : normValue >= 40 ? '#ffd700' : '#39ff14';
+
+  return (
+    <div className="space-y-1.5">
+      <div className="flex justify-between items-end">
+        <div>
+          <p className="text-sm font-bold font-grotesk text-ds-silver uppercase">{label}</p>
+          <p className="text-[10px] font-mono text-ds-silver/30">{sub}</p>
+        </div>
+        <span className="text-xs font-mono font-bold" style={{ color }}>
+          {Math.round(normValue)}%
+        </span>
+      </div>
+      <div className="h-1.5 bg-ds-silver/5 border border-ds-silver/10">
+        <div
+          className="h-full transition-all duration-1000 ease-out"
+          style={{ width: `${normValue}%`, backgroundColor: color }}
+        />
+      </div>
     </div>
   );
 }

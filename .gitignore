@@ -3,8 +3,9 @@ __pycache__/
 node_modules/
 dist/
 .env
-.DS_Store\n
-.venv
+.DS_Store
+.venv/
+venv/
+backend/venv/
 *.db
 backend/deepscan.db
-947d57bab2ef0704961ca1f071194c293c9133d2

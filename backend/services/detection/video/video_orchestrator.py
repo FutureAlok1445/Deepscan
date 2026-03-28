@@ -1,8 +1,17 @@
 import os
-import cv2
-import numpy as np
 import asyncio
 from loguru import logger
+
+HAS_CV2 = False
+try:
+    import cv2
+    import numpy as np
+    HAS_CV2 = True
+except ImportError:
+    cv2 = None
+    import types
+    np = types.SimpleNamespace(ndarray=object, array=lambda *a, **k: [], zeros=lambda *a, **k: [])
+    logger.warning("cv2/numpy not installed — VideoOrchestrator will return heuristic fallback")
 
 from backend.services.detection.video.spatial_analyzer import SpatialAnalyzer
 from backend.services.detection.video.optical_flow_analyzer import OpticalFlowAnalyzer
