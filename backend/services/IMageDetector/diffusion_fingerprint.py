@@ -30,7 +30,6 @@ class DiffusionFingerprintAnalyzer:
             self.detector = pipeline(
                 "image-classification", 
                 model=self.model_name,
-                use_safetensors=False
             )
             self.is_ready = True
             logger.info("Diffusion Fingerprint layer loaded successfully.")
