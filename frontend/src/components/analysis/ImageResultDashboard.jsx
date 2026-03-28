@@ -273,6 +273,9 @@ export default function ImageResultDashboard({ result, originalFile }) {
     const hasHeatmap = !!explain.ela_base64_heatmap_prefix || (explain.regions && explain.regions.length > 0);
     const score = result.score ?? result.aacs_score ?? 0;
 
+    // Use the base64 URL from result if originalFile (File object) is missing (extension flow)
+    const displayImage = originalFile || result.original_image_url;
+
     const tabs = [
         { id: 'overview',   label: 'Overview',         icon: TrendingUp },
         { id: 'heatmaps',   label: 'Forensic Radar',   icon: Aperture, badge: hasHeatmap ? '✓' : undefined },
@@ -292,7 +295,7 @@ export default function ImageResultDashboard({ result, originalFile }) {
             {/* Tab Content */}
             <div className="p-4 sm:p-6">
                 {tab === 'overview'   && <OverviewTab   result={result} />}
-                {tab === 'heatmaps'   && <HeatmapsTab   explain={explain} originalImage={originalFile} />}
+                {tab === 'heatmaps'   && <HeatmapsTab   explain={explain} originalImage={displayImage} />}
                 {tab === 'expert'     && <TelemetryTab  result={result} />}
                 
                 {/* The Arbitration System runs as its own self-contained widget here */}
@@ -305,7 +308,7 @@ export default function ImageResultDashboard({ result, originalFile }) {
                             An experimental system where Claude 3.5 Sonnet (Authenticator) and GPT-4o (Detector) argue the authenticity of this image, and Llama 3 70B acts as the final judge. Runs entirely in your browser.
                         </p>
                     </div>
-                    <ArbitrationSystem imageFile={originalFile} backendScore={score} />
+                    <ArbitrationSystem imageFile={displayImage} backendScore={score} />
                 </div>
             </div>
         </div>

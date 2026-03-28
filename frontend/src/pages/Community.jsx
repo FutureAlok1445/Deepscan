@@ -103,7 +103,7 @@ export default function Community() {
 }
 
 function AlertCard({ alert, onVote }) {
-  const verdict = VERDICT_CONFIG[alert.verdict] || VERDICT_CONFIG.UNCERTAIN;
+  const verdict = VERDICT_CONFIG[alert.verdict] || VERDICT_CONFIG.PARTIALLY_AI;
 
   return (
     <BrutalCard className="space-y-3">

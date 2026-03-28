@@ -1,9 +1,10 @@
 /* ─── Verdict Config (AACS Bands) ─── */
 export const VERDICT_CONFIG = {
-  AUTHENTIC: { label: 'Authentic', color: '#39ff14', emoji: '✅', band: '0–30' },
-  UNCERTAIN: { label: 'Uncertain', color: '#ffd700', emoji: '⚠️', band: '31–60' },
-  LIKELY_FAKE: { label: 'Likely Fake', color: '#ff8c00', emoji: '🔶', band: '61–85' },
+  AUTHENTIC: { label: 'Authentic', color: '#39ff14', emoji: '✅', band: '0–34' },
+  PARTIALLY_AI: { label: 'Partially AI', color: '#ffb300', emoji: '⚠️', band: '35–70' },
+  LIKELY_FAKE: { label: 'Likely Fake', color: '#ff8c00', emoji: '🔶', band: '71–85' },
   DEFINITELY_FAKE: { label: 'Definitely Fake', color: '#ff3c00', emoji: '🚨', band: '86–100' },
+  UNCERTAIN: { label: 'Uncertain', color: '#888888', emoji: '❓', band: 'N/A' },
 };
 
 /* ─── AACS Sub-Score Keys ─── */

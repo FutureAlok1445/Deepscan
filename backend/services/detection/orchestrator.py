@@ -99,8 +99,8 @@ class DetectionOrchestrator:
                 score, img_findings = await self.image_detector.predict_async(file_path)
                 findings.extend(img_findings)
             elif category == "video":
-                # Run 9-engine VideoOrchestrator (returns score, ltca_data, frames)
-                score, ltca_data, frames = await self.video_detector.process_video(file_path, num_frames=16)
+                # Run 9-engine VideoOrchestrator (returns score, ltca_data, frames, description_task)
+                score, ltca_data, frames, description_task = await self.video_detector.process_video(file_path, num_frames=16)
                 ltca_data["frames"] = frames  # kept for internal semantic analysis, stripped before HTTP response
 
                 findings.append({
@@ -121,6 +121,140 @@ class DetectionOrchestrator:
                     findings.append(af)
 
                 self._last_ltca_data = ltca_data
+
+                # ── Per-frame image analysis (60 frames) ──────────────────────
+                # Sample 60 frames evenly from the already-decoded frame pool,
+                # run the existing image analysis pipeline on each, and attach
+                # results so the frontend can display them in a frame grid.
+                if frames:
+                    try:
+                        import cv2
+                        import base64
+                        import io as _io
+                        import numpy as np
+                        from backend.services.IMageDetector.orchestrator import image_orchestrator
+
+                        NUM_ANALYSIS_FRAMES = 30
+                        total_frames = len(frames)
+                        # Evenly sample up to 60 indices
+                        if total_frames <= NUM_ANALYSIS_FRAMES:
+                            sample_indices = list(range(total_frames))
+                        else:
+                            sample_indices = [
+                                int(round(i * (total_frames - 1) / (NUM_ANALYSIS_FRAMES - 1)))
+                                for i in range(NUM_ANALYSIS_FRAMES)
+                            ]
+
+                        # VideoOrchestrator reads FPS — approximate timestamp from index position
+                        try:
+                            cap_tmp = cv2.VideoCapture(file_path)
+                            fps_video = cap_tmp.get(cv2.CAP_PROP_FPS) or 30.0
+                            total_vid_frames = int(cap_tmp.get(cv2.CAP_PROP_FRAME_COUNT)) or total_frames
+                            cap_tmp.release()
+                        except Exception:
+                            fps_video = 30.0
+                            total_vid_frames = total_frames
+
+                        def _encode_frame(bgr_frame):
+                            """Encode a BGR numpy frame to JPEG base64 data URL."""
+                            ret, buf = cv2.imencode(".jpg", bgr_frame, [cv2.IMWRITE_JPEG_QUALITY, 72])
+                            if not ret:
+                                return None
+                            return "data:image/jpeg;base64," + base64.b64encode(buf.tobytes()).decode("utf-8")
+
+                        import asyncio
+                        # Limit concurrency to 4 frames at a time to prevent OOM / CPU thrashing
+                        # while taking full advantage of the thread pool.
+                        frame_semaphore = asyncio.Semaphore(4)
+
+                        async def _analyze_single_frame(frame_pool_idx, vid_frame_idx):
+                            """Run ImageOrchestrator on one frame, return analysis dict."""
+                            async with frame_semaphore:
+                                bgr = frames[frame_pool_idx]
+                                b64 = _encode_frame(bgr)
+                                if b64 is None:
+                                    return None
+                                timestamp_sec = round(vid_frame_idx / fps_video, 2)
+
+                                # Convert BGR → RGB PIL bytes for ImageOrchestrator
+                                rgb = cv2.cvtColor(bgr, cv2.COLOR_BGR2RGB)
+                                from PIL import Image as PILImage
+                                pil_img = PILImage.fromarray(rgb)
+                                img_bytes_buf = _io.BytesIO()
+                                pil_img.save(img_bytes_buf, format="JPEG", quality=90)
+                                img_bytes_buf.seek(0)
+
+                                class _MockFile:
+                                    async def read(self):
+                                        return img_bytes_buf.read()
+
+                                try:
+                                    img_result = await image_orchestrator.process_image(_MockFile(), skip_lens=True)
+                                    img_score = img_result.get("score", 0)
+                                    img_signals = img_result.get("signals", {})
+                                    img_verdict = img_result.get("verdict", "UNCERTAIN")
+                                except Exception as img_err:
+                                    logger.warning(f"Frame {frame_pool_idx} image analysis failed: {img_err}")
+                                    img_score = 0
+                                    img_signals = {}
+                                    img_verdict = "ERROR"
+
+                                return {
+                                    "frame_index": frame_pool_idx,
+                                    "vid_frame_index": int(vid_frame_idx),
+                                    "timestamp_sec": timestamp_sec,
+                                    "image_b64": b64,
+                                    "score": round(float(img_score), 1),
+                                    "signals": {k: round(float(v), 1) if isinstance(v, (int, float)) else v
+                                                for k, v in img_signals.items()},
+                                    "verdict": img_verdict,
+                                }
+
+                        # Map each sample index to the closest real video frame index
+                        # (frames were sampled at linspace over total_vid_frames)
+                        pool_to_vid = np.linspace(0, total_vid_frames - 1, total_frames, dtype=int)
+
+                        tasks = [
+                            _analyze_single_frame(pool_idx, int(pool_to_vid[pool_idx]))
+                            for pool_idx in sample_indices
+                        ]
+                        frame_results_raw = await asyncio.gather(*tasks, return_exceptions=True)
+                    except Exception as fa_err:
+                        logger.warning(f"Per-frame image analysis failed: {fa_err}")
+                        frame_results_raw = []
+                else:
+                    frame_results_raw = []
+
+                if description_task:
+                    try:
+                        video_description = await description_task
+                        ltca_data["video_description"] = video_description
+                        
+                        # --- Qwen AI Percentage Integration ---
+                        qwen_prob = video_description.get("ai_probability")
+                        if qwen_prob is not None and qwen_prob != 50.0:
+                            # We blend the Qwen extracted probability directly into the main spatial score
+                            logger.info(f"Qwen VLM returned AI_PROBABILITY: {qwen_prob}%")
+                            # weight: 50% Qwen, 50% existing Spatio-Temporal MAS score
+                            score = (score * 0.5) + (qwen_prob * 0.5)
+                            
+                            findings.append({
+                                "engine": "Qwen-Vision-Language-Model",
+                                "score": round(qwen_prob, 1),
+                                "detail": f"AI Expert System analyzed frames and estimated {qwen_prob}% probability of synthetic manipulation."
+                            })
+                    except Exception as desc_err:
+                        logger.warning(f"VideoDescriber task failed: {desc_err}")
+                        ltca_data["video_description"] = {"description": "Content analysis unavailable.", "moments": []}
+                else:
+                    ltca_data["video_description"] = {"description": "Content analysis unavailable.", "moments": []}
+
+                frame_analyses = [
+                    r for r in frame_results_raw
+                    if r is not None and not isinstance(r, Exception)
+                ]
+                ltca_data["frame_analyses"] = frame_analyses
+                logger.info(f"[FrameAnalysis] Completed image analysis on {len(frame_analyses)} frames.")
 
             elif category == "audio":
                 # For audio, MAS uses the same 7-sig detector as AAS.
@@ -419,18 +553,6 @@ class DetectionOrchestrator:
         elapsed = round(time.time() - start, 2)
         logger.info(f"[{analysis_id}] Pipeline complete in {elapsed}s — AACS={aacs_score:.1f} ({verdict})")
 
-        # ---------- Build response matching frontend shape ----------
-        # Extract heartbeat data from PPS findings if available
-        heartbeat_data = {}
-        for f in pps_f:
-            if f.get("engine") == "rPPG-Heartbeat":
-                heartbeat_data = {
-                    "heart_rate": f.get("heart_rate", 0),
-                    "confidence": f.get("confidence", 0),
-                    "signal": f.get("signal", []),
-                }
-                break
-
         # ---------- Extract audio spectrum data from AAS findings ----------
         audio_spectrum_data = {}
         audio_signature_scores = {}
@@ -480,7 +602,6 @@ class DetectionOrchestrator:
             },
             "findings": all_findings,
             "forensics": forensics,
-            "ltca_data": getattr(self, "_last_ltca_data", {}),
             "ltca_data": ltca_data_payload,
             "heartbeat": heartbeat_data,
             "narrative": narrative,

@@ -122,11 +122,11 @@ export default function History() {
         ) : (
           <div className="space-y-3">
             {filtered.map((item) => {
-              const verdict = VERDICT_CONFIG[item.verdict] || VERDICT_CONFIG.UNCERTAIN;
+              const verdict = VERDICT_CONFIG[item.verdict] || VERDICT_CONFIG.PARTIALLY_AI;
               return (
                 <Link
                   key={item.id}
-                  to={`/result/${item.id}`}
+                  to={item.file_type?.includes('image') ? `/result/image/${item.id}` : item.file_type?.includes('video') ? `/result/video/${item.id}` : `/result/${item.id}`}
                   className="block group hist-item"
                 >
                   <BrutalCard className="flex items-center gap-4 !py-4 group-hover:border-ds-cyan transition-colors">

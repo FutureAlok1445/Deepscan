@@ -1,4 +1,4 @@
-﻿import { Routes, Route, useLocation } from 'react-router-dom'
+import { Routes, Route, useLocation } from 'react-router-dom'
 import { Toaster } from 'react-hot-toast'
 import { useState, useEffect, lazy, Suspense } from 'react'
 import Navbar from './components/layout/Navbar'
@@ -8,6 +8,8 @@ import Home from './pages/Home'
 // Lazy-loaded pages for faster initial load
 const Analyze = lazy(() => import('./pages/Analyze'))
 const Result = lazy(() => import('./pages/Result'))
+const ImageResult = lazy(() => import('./pages/ImageResult'))
+const VideoResult = lazy(() => import('./pages/VideoResult'))
 const History = lazy(() => import('./pages/History'))
 const Learn = lazy(() => import('./pages/Learn'))
 const Community = lazy(() => import('./pages/Community'))
@@ -68,6 +70,8 @@ export default function App() {
             <Route path="/" element={<Home />} />
             <Route path="/analyze" element={<Analyze />} />
             <Route path="/result/:id" element={<Result />} />
+            <Route path="/result/image/:id" element={<ImageResult />} />
+            <Route path="/result/video/:id" element={<VideoResult />} />
             <Route path="/history" element={<History />} />
             <Route path="/learn" element={<Learn />} />
             <Route path="/community" element={<Community />} />
