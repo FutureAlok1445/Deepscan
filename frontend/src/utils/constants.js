@@ -4,6 +4,7 @@ export const VERDICT_CONFIG = {
   PARTIALLY_AI: { label: 'Partially AI', color: '#ffb300', emoji: '⚠️', band: '35–70' },
   LIKELY_FAKE: { label: 'Likely Fake', color: '#ff8c00', emoji: '🔶', band: '71–85' },
   DEFINITELY_FAKE: { label: 'Definitely Fake', color: '#ff3c00', emoji: '🚨', band: '86–100' },
+  UNCERTAIN: { label: 'Uncertain', color: '#888888', emoji: '❓', band: 'N/A' },
 };
 
 /* ─── AACS Sub-Score Keys ─── */

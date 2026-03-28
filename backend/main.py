@@ -187,6 +187,11 @@ app.include_router(analyze.router, prefix="/api/v1/analyze", tags=["Analyze"])
 app.include_router(analyze_url.router, prefix="/api/v1/analyze", tags=["Analyze URL"])
 app.include_router(analyze_image.router, prefix="/api/v1/analyze", tags=["Analyze Image"])
 app.include_router(analyze_text.router, prefix="/api/v1/analyze/text", tags=["Analyze Text"])
+app.include_router(live_scan.router, prefix="/api/v1/live", tags=["Live Scan"])
+app.include_router(history.router, prefix="/api/v1/history", tags=["History"])
+app.include_router(report.router, prefix="/api/v1/report", tags=["Report"])
+app.include_router(community.router, prefix="/api/v1/community", tags=["Community"])
+app.include_router(feedback.router, prefix="/api/v1/feedback", tags=["Feedback"])
 app.include_router(webhook.router, prefix="/webhook", tags=["Webhook"])
 
 

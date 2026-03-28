@@ -403,6 +403,12 @@ function getLocalHistory() {
 }
 
 export async function analyzeFile(file, onUploadProgress, language = 'en') {
+  // ─── Route image files to the dedicated /analyze/image endpoint ───
+  const isImage = file.type?.startsWith('image/');
+  if (isImage) {
+    return analyzeImageFile(file);
+  }
+
   const formData = new FormData();
   formData.append('file', file);
   formData.append('language', language);
@@ -433,8 +439,39 @@ export async function analyzeFile(file, onUploadProgress, language = 'en') {
  * 3. Normalize the result shape for the frontend
  */
 async function analyzeImageFile(file) {
-  // Use working general analyze endpoint instead of broken image-specific one
-  return analyzeFile(file);
+  const formData = new FormData();
+  formData.append('file', file);
+
+  // Step 1: submit job
+  const submitRes = await api.post('/analyze/image', formData, {
+    headers: { 'Content-Type': 'multipart/form-data' },
+    timeout: 30000,
+  });
+  const { job_id } = submitRes.data;
+  if (!job_id) throw new Error('Image analysis did not return a job_id');
+
+  // Step 2: poll for result (up to 60s)
+  for (let attempt = 0; attempt < 30; attempt++) {
+    await new Promise(r => setTimeout(r, 2000));
+    const pollRes = await api.get(`/analyze/result/${job_id}`);
+    const { status, data } = pollRes.data;
+    if (status === 'done' && data) {
+      const normalized = normalizeImageResult(job_id, data, file.name);
+      cacheResult(job_id, normalized);
+      cacheHistoryItem({
+        id: job_id,
+        score: normalized.score,
+        aacs_score: normalized.score,
+        verdict: normalized.verdict,
+        filename: file.name,
+        file_type: 'image',
+        created_at: normalized.created_at,
+      });
+      return normalized;
+    }
+    if (status === 'failed') throw new Error('Image analysis failed on the server.');
+  }
+  throw new Error('Image analysis timed out. Please try again.');
 }
 
 export async function analyzeUrl(url, language = 'en') {
@@ -490,34 +527,13 @@ export async function downloadReport(id, overrideScore, overrideVerdict) {
 }
 
 export async function getHistory() {
-  const local = getLocalHistory();
   try {
     const res = await api.get('/history');
     const data = res.data;
-    const backendItems = Array.isArray(data) ? data : (data.items || []);
-
-    // Merge backend and local history:
-    // This ensures video analyses (which live in local storage because
-    // the backend DB doesn't support them yet) show up in the History page.
-    const map = new Map();
-    
-    // Load local items first so their filename/file_type metadata is kept
-    local.forEach(item => map.set(item.id, item));
-    
-    // Overlap backend items (which are persistent), retaining filename if missing
-    backendItems.forEach(item => {
-      const existing = map.get(item.id) || {};
-      map.set(item.id, {
-        ...item,
-        filename: existing.filename || item.filename || 'Unknown File',
-        file_type: existing.file_type || item.file_type || 'image',
-      });
-    });
-
-    return Array.from(map.values()).sort((a, b) => new Date(b.created_at || 0) - new Date(a.created_at || 0));
+    return Array.isArray(data) ? data : (data.items || []);
   } catch {
-    // Fall back to locally cached history if API fails
-    return local;
+    // Fall back to locally cached history (works without a DB)
+    return getLocalHistory();
   }
 }
 
@@ -567,49 +583,18 @@ export async function submitFeedback(args) {
  * @param {string} language - Language code (default 'en')
  * @returns {Promise<Object>} Analysis result
  */
-export async function analyzeText(text, mode = 'ai', language = 'en') {
-  const res = await api.post('/analyze/text', { text, mode, language });
+export async function analyzeText(text, language = 'en') {
+  const res = await api.post('/analyze/text', { text, language });
   const result = res.data;
-
-  // Normalize: ensure expected fields exist for both display and caching
-  if (!result.score && result.overall_score != null) {
-    result.score = result.overall_score;
-  }
-  if (!result.aacs_score && result.overall_score != null) {
-    result.aacs_score = result.overall_score;
-  }
-  if (!result.created_at) {
-    result.created_at = new Date().toISOString();
-  }
-  if (!result.word_count && text) {
-    result.word_count = text.trim().split(/\s+/).length;
-  }
-
-  // Ensure details.signals and details.reasons exist for the UI
-  if (!result.details) {
-    result.details = {
-      signals: { hf_model: 0, perplexity: 0, burstiness: 0, sapling_api: 0 },
-      reasons: ['Analysis complete.'],
-    };
-  }
-  if (!result.details.signals) {
-    result.details.signals = { hf_model: 0, perplexity: 0, burstiness: 0, sapling_api: 0 };
-  }
-  if (!result.details.reasons) {
-    result.details.reasons = ['Analysis complete.'];
-  }
-
-  // Cache for result page and history
   cacheResult(result.id, result);
   cacheHistoryItem({
     id: result.id,
-    score: result.overall_score ?? 0,
-    aacs_score: result.overall_score ?? 0,
+    score: result.score ?? result.aacs_score ?? 0,
+    aacs_score: result.aacs_score ?? result.score ?? 0,
     verdict: result.verdict,
-    filename: `Text Scan (${result.word_count || 0} words)`,
+    filename: `Text (${result.word_count || 0} words)`,
     file_type: 'text',
     created_at: result.created_at,
   });
-
   return result;
 }

@@ -57,7 +57,13 @@ export default function Analyze() {
         result = await analyze(file);
       }
       if (result?.id) {
-        navigate(`/result/${result.id}`, { state: { originalFile: file } });
+        if (result.file_type?.includes('image')) {
+          navigate(`/result/image/${result.id}`, { state: { originalFile: file } });
+        } else if (result.file_type?.includes('video')) {
+          navigate(`/result/video/${result.id}`, { state: { originalFile: file } });
+        } else {
+          navigate(`/result/${result.id}`, { state: { originalFile: file } });
+        }
       } else if (result) {
         navigate('/result/demo', { state: { originalFile: file } });
       }
