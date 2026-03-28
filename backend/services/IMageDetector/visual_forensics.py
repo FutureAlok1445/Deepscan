@@ -179,7 +179,7 @@ class VisualForensicsDetector:
             self.ai_detector_pipe = pipeline(
                 "image-classification",
                 model="umm-maybe/AI-image-detector",
-                device=device_id
+                device=device_id,
             )
             logger.info("VisualForensics ViT AI-detector loaded.")
 

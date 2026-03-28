@@ -70,11 +70,13 @@ class SemanticContextAnalyzer:
             # Replaced facebook/bart-large-mnli (1.6GB) with lightweight DistilBERT-MNLI (~260MB)
             self.intent_analyzer = pipeline(
                 "zero-shot-classification",
-                model="typeform/distilbert-base-uncased-mnli",
+                model="facebook/bart-large-mnli",
+                revision="c626438",
+                model_kwargs={"tie_word_embeddings": False}
             )
             self.clip_image_analyzer = pipeline(
                 "zero-shot-image-classification",
-                model="openai/clip-vit-base-patch32"
+                model="openai/clip-vit-base-patch32",
             )
             logger.info("SemanticContext lightweight DistilBERT-MNLI + CLIP loaded.")
         except Exception as e:

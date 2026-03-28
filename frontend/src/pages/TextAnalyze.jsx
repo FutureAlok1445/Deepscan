@@ -3,6 +3,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { Shield, Zap, RefreshCw, AlertTriangle, CheckCircle, BarChart3, Binary, MessageSquare, BrainCircuit, Mail, Link as LinkIcon, Globe, Lock } from 'lucide-react';
 import axios from 'axios';
 import toast from 'react-hot-toast';
+import { analyzeText } from '../api/deepscan';
 import BrutalCard from '../components/ui/BrutalCard';
 import BrutalButton from '../components/ui/BrutalButton';
 
@@ -30,17 +31,18 @@ export default function TextAnalyze() {
     setResult(null);
 
     try {
-      const response = await axios.post(`${API_BASE_URL}/api/v1/analyze/text`, { text, mode });
-      setResult(response.data);
+      // Use centralized API service for consistency
+      const data = await analyzeText(text, mode);
+      setResult(data);
       toast.success('Analysis complete!');
-
-      // Scroll to result after a short delay to allow animation
+      
       setTimeout(() => {
         resultRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
       }, 300);
     } catch (error) {
       console.error('Analysis failed:', error);
-      toast.error(error.response?.data?.detail || 'Analysis failed. Please try again.');
+      const detail = error.response?.data?.detail || error.message || 'Analysis failed. Please try again.';
+      toast.error(detail);
     } finally {
       setIsLoading(false);
     }
@@ -260,16 +262,16 @@ export default function TextAnalyze() {
                   <div className="space-y-6">
                     {result.type === 'ai' ? (
                       <>
-                        <SignalRow label="Model Confidence" value={result.details.signals.hf_model} sub="Neural pattern matching" color={getScoreColor(result.details.signals.hf_model)} />
-                        <SignalRow label="Perplexity" value={100 - (result.details.signals.perplexity / 2)} sub="Text predictability" color={getScoreColor(100 - (result.details.signals.perplexity / 2))} />
-                        <SignalRow label="Burstiness" value={100 - result.details.signals.burstiness} sub="Sentence variance" color={getScoreColor(100 - result.details.signals.burstiness)} />
-                        <SignalRow label="AI Debate" value={result.details.signals.sapling_api} sub="Sapling / LLM Consensus" color={getScoreColor(result.details.signals.sapling_api)} />
+                        <SignalRow label="Model Confidence" value={result.details?.signals?.hf_model ?? 0} sub="Neural pattern matching" color={getScoreColor(result.details?.signals?.hf_model ?? 0)} />
+                        <SignalRow label="Perplexity" value={100 - ((result.details?.signals?.perplexity ?? 0) / 2)} sub="Text predictability" color={getScoreColor(100 - ((result.details?.signals?.perplexity ?? 0) / 2))} />
+                        <SignalRow label="Burstiness" value={100 - (result.details?.signals?.burstiness ?? 0)} sub="Sentence variance" color={getScoreColor(100 - (result.details?.signals?.burstiness ?? 0))} />
+                        <SignalRow label="AI Debate" value={result.details?.signals?.sapling_api ?? 0} sub="Sapling / LLM Consensus" color={getScoreColor(result.details?.signals?.sapling_api ?? 0)} />
                       </>
                     ) : (
                       <>
-                        <SignalRow label="Keywords" value={result.details.signals.keywords} sub="Suspicious language" color="#ffd700" />
-                        <SignalRow label="Links" value={result.details.signals.links} sub="URL reputation" color="#ff3c00" />
-                        <SignalRow label="Headers" value={result.details.signals.headers} sub="Source verification" color="#ff3c00" />
+                        <SignalRow label="Keywords" value={result.details?.signals?.keywords ?? 0} sub="Suspicious language" color="#ffd700" />
+                        <SignalRow label="Links" value={result.details?.signals?.links ?? 0} sub="URL reputation" color="#ff3c00" />
+                        <SignalRow label="Headers" value={result.details?.signals?.headers ?? 0} sub="Source verification" color="#ff3c00" />
                       </>
                     )}
                   </div>
@@ -287,7 +289,7 @@ export default function TextAnalyze() {
                       Forensic Insights
                     </h3>
                     <ul className="space-y-3">
-                      {result.details.reasons.map((reason, idx) => (
+                      {(result.details?.reasons || ['Analysis complete.']).map((reason, idx) => (
                         <motion.li
                           key={idx}
                           initial={{ opacity: 0, x: -10 }}

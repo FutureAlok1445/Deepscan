@@ -27,7 +27,10 @@ class DiffusionFingerprintAnalyzer:
         try:
             # Load the pre-trained vision transformer for AI detection
             logger.info(f"Loading Diffusion Fingerprint Model: {self.model_name}")
-            self.detector = pipeline("image-classification", model=self.model_name)
+            self.detector = pipeline(
+                "image-classification", 
+                model=self.model_name,
+            )
             self.is_ready = True
             logger.info("Diffusion Fingerprint layer loaded successfully.")
         except Exception as e:

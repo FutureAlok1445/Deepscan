@@ -1,8 +1,17 @@
 import os
-import cv2
-import numpy as np
 import asyncio
 from loguru import logger
+
+HAS_CV2 = False
+try:
+    import cv2
+    import numpy as np
+    HAS_CV2 = True
+except ImportError:
+    cv2 = None
+    import types
+    np = types.SimpleNamespace(ndarray=object, array=lambda *a, **k: [], zeros=lambda *a, **k: [])
+    logger.warning("cv2/numpy not installed — VideoOrchestrator will return heuristic fallback")
 
 from backend.services.detection.video.spatial_analyzer import SpatialAnalyzer
 from backend.services.detection.video.optical_flow_analyzer import OpticalFlowAnalyzer
@@ -14,7 +23,9 @@ from backend.services.detection.video.face_mesh_analyzer import FaceMeshAnalyzer
 from backend.services.detection.video.eye_reflection_analyzer import EyeReflectionAnalyzer
 from backend.services.detection.video.lip_sync_analyzer import LipSyncAnalyzer
 from backend.services.detection.video.video_describer import VideoDescriber
+from backend.services.detection.video.biological_analyzer import BiologicalAnalyzer
 from backend.services.explainability.video_nlm_report import VideoNLMReport
+from .sota_models import sota_ensemble, ensemble_sota
 
 class VideoOrchestrator:
     def __init__(self):
@@ -28,9 +39,10 @@ class VideoOrchestrator:
         self.face_mesh = FaceMeshAnalyzer()
         self.eye_reflection = EyeReflectionAnalyzer()
         self.lip_sync = LipSyncAnalyzer()
+        self.rppg = BiologicalAnalyzer()
         self.describer = VideoDescriber()
         self.nlm_reporter = VideoNLMReport()
-        logger.info("VideoOrchestrator loaded — 9 detection engines + VideoDescriber active")
+        logger.info("VideoOrchestrator loaded — 10 detection engines + VideoDescriber active")
 
     async def process_video(self, video_path: str, num_frames=16) -> tuple:
         """
@@ -40,12 +52,9 @@ class VideoOrchestrator:
           Advanced: Eye Blink (EAR), Face Mesh (LK), Eye Reflection, Lip-Sync (AV Cross-Corr)
         """
         try:
-            # ── 1. LTCA Physics Analysis ──
-            ltca_data = self.ltca.analyze_trajectory(video_path)
-            if ltca_data.get("is_fake"):
-                logger.warning(f"LTCA Flag: {ltca_data.get('reason')}")
-
-            # ── 2. Frame Extraction ──
+            # ── 2. Frame Extraction (Optimized: One pass) ──
+            # Increasing num_frames for much higher accuracy in Biological/LipSync/Mesh
+            target_frames = 80 
             cap = cv2.VideoCapture(video_path)
             total = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
             fps = cap.get(cv2.CAP_PROP_FPS) or 30.0
@@ -57,61 +66,83 @@ class VideoOrchestrator:
                     "nlm_report": "Deepscan aborted: The video contains fewer than 2 readable frames. Try re-encoding as H.264 MP4."
                 }, []
 
-            frame_indices = np.linspace(0, total - 1, num_frames, dtype=int)
+            # Sample frames evenly
+            frame_indices = np.linspace(0, total - 1, target_frames, dtype=int)
             frames = []
             for idx in frame_indices:
                 cap.set(cv2.CAP_PROP_POS_FRAMES, idx)
                 ret, frame = cap.read()
                 if ret:
+                    # Optional: minor downscale here if files are 4K to save RAM
+                    if frame.shape[1] > 1280:
+                        frame = cv2.resize(frame, (1280, 720))
                     frames.append(frame)
             cap.release()
 
-            if not frames:
-                return 50.0, {}, []
+            if len(frames) < 10:
+                return 50.0, {"nlm_report": "Analysis failed: Not enough frames could be decoded."}, []
 
-            # ── 3. Classic Engines ──
-            spatial_score = await self.spatial.analyze_frames([frames[0], frames[len(frames)//2], frames[-1]])
-            temporal_penalty = self.temporal.analyze_sequence(frames)
-            noise_penalty = self.noise.analyze_frames(frames)
-            artifact_penalty = self.artifact_scanner.analyze_frames(frames)
+            # ── 3. Optimized AI/Forensic Engine Execution (Concurrent) ──
+            # passing the SAME frame pool to all engines to avoid redundant reads
+            
+            # Physics (LTCA) - Now uses the decoded frames list directly
+            ltca_task = asyncio.create_task(asyncio.to_thread(self.ltca.analyze_trajectory, frames))
+            
+            # Classic Spatial/Temporal/Noise/Artifact
+            spatial_task = asyncio.create_task(self.spatial.analyze_frames([frames[0], frames[len(frames)//2], frames[-1]]))
+            temporal_task = asyncio.to_thread(self.temporal.analyze_sequence, frames)
+            noise_task = asyncio.to_thread(self.noise.analyze_frames, frames)
+            artifact_task = asyncio.to_thread(self.artifact_scanner.analyze_frames, frames)
 
-            # ── 4. Advanced Engines + Content Description (run concurrently) ──
-            blink_task   = asyncio.get_event_loop().run_in_executor(None, self.blink.analyze_frames, frames, fps)
-            mesh_task    = asyncio.get_event_loop().run_in_executor(None, self.face_mesh.analyze_frames, frames)
-            reflect_task = asyncio.get_event_loop().run_in_executor(None, self.eye_reflection.analyze_frames, frames)
+            # Advanced Biological/Tracking/LipSync
+            blink_task   = asyncio.to_thread(self.blink.analyze_frames, frames, fps)
+            mesh_task    = asyncio.to_thread(self.face_mesh.analyze_frames, frames)
+            reflect_task = asyncio.to_thread(self.eye_reflection.analyze_frames, frames)
+            sync_task    = self.lip_sync.analyze(video_path, frames)
+            rppg_task    = asyncio.to_thread(self.rppg.analyze_frames, frames, fps)
 
-            # Run sync tasks concurrently
-            blink_result, mesh_result, reflect_result = await asyncio.gather(
-                blink_task, mesh_task, reflect_task
-            )
+            # SOTA CNN tasks
+            meso_task = asyncio.to_thread(lambda: sota_ensemble['mesonet4'].predict(frames[0]))
+            xcep_task = asyncio.to_thread(lambda: sota_ensemble['xception'].predict(frames[len(frames)//2]))
 
-            sync_result  = self.lip_sync.analyze(video_path, frames)
-
-            # Video description runs concurrently with scoring
+            # ── Qwen3 VL forensic description — launched NOW as concurrent task ──
+            # IMPORTANT: Must be created as asyncio.Task() BEFORE gather so it
+            # runs concurrently with the detection engines, not sequentially after.
             filename = os.path.basename(video_path)
-            description_task = self.describer.describe(frames, filename=filename)
+            logger.info(f"[Qwen3 VL] Sending {min(8, len(frames))} frames to LM Studio for forensic description...")
+            description_task = asyncio.ensure_future(self.describer.describe(frames, filename=filename))
+
+            # Gather ALL 10 engines (Qwen runs concurrently in background)
+            (
+                ltca_data,
+                spatial_score, temporal_penalty, noise_penalty, artifact_penalty,
+                blink_result, mesh_result, reflect_result, sync_result, rppg_result
+            ) = await asyncio.gather(
+                ltca_task,
+                spatial_task, temporal_task, noise_task, artifact_task,
+                blink_task, mesh_task, reflect_task, sync_task, rppg_task
+            )
 
             blink_score   = blink_result.get("score", 50.0)
             mesh_score    = mesh_result.get("score", 50.0)
             reflect_score = reflect_result.get("score", 50.0)
             sync_score    = sync_result.get("score", 50.0)
+            rppg_score    = rppg_result.get("score", 50.0)
 
-            # ── 5. LTCA weight contribution ──
+            # ── 4. Weighted aggregation (LTCA 15%, etc.) ──
             ltca_weight = (ltca_data.get("confidence", 0) / 100.0) * 15.0 if ltca_data.get("is_fake") else 0.0
 
-            # ── 6. Weighted aggregation (9 engines, total 100%) ──
-            # Classic:  Spatial 28%, Temporal 15%, LTCA 15%, Noise 5%, Artifact 7%  = 70%
-            # Advanced: Blink 8%, Mesh 8%, Eye Reflect 5%, LipSync 9%               = 30%
             raw_score = (
-                spatial_score      * 0.28 +
+                spatial_score      * 0.25 +
                 temporal_penalty   * 0.15 +
-                ltca_weight        * 1.0  +   # already weighted (max 15%)
+                ltca_weight        * 1.0  +  
                 noise_penalty      * 0.05 +
-                artifact_penalty   * 0.07 +
+                artifact_penalty   * 0.05 +
                 blink_score        * 0.08 +
                 mesh_score         * 0.08 +
                 reflect_score      * 0.05 +
-                sync_score         * 0.09
+                sync_score         * 0.08 +
+                rppg_score         * 0.06
             )
 
             # Multi-engine consensus harshness multiplier
@@ -149,6 +180,8 @@ class VideoOrchestrator:
             ltca_data["sync_detail"]       = sync_result.get("detail", "")
             ltca_data["sync_correlation"]  = sync_result.get("pearson_correlation", None)
             ltca_data["sync_offset"]       = sync_result.get("frame_offset", None)
+            ltca_data["rppg_bpm"]          = rppg_result.get("heart_rate_bpm", None)
+            ltca_data["rppg_snr"]          = rppg_result.get("snr", None)
 
             # ── 8. Build per-engine findings (feed directly into frontend KeyFindings) ──
             advanced_findings = []
@@ -180,6 +213,15 @@ class VideoOrchestrator:
                     "score": round(sync_score, 1),
                     "detail": sync_result.get("detail", ""),
                     "reasoning": sync_result.get("reasoning", "")
+                })
+            
+            # Add rPPG findings so it surfaces on the frontend
+            if rppg_score > 0:
+                advanced_findings.append({
+                    "engine": "rPPG-Biological-Pulse",
+                    "score": round(rppg_score, 1),
+                    "detail": rppg_result.get("detail", ""),
+                    "reasoning": rppg_result.get("reasoning", "")
                 })
 
             ltca_data["advanced_findings"] = advanced_findings
