@@ -355,6 +355,10 @@ function normalizeImageResult(jobId, scanData, originalFilename) {
       detailed: exp.text || '',
       technical: Object.entries(signals).map(([k,v]) => `${k}=${typeof v === 'number' ? v.toFixed(1) : v}`).join(', '),
     },
+    explainability: {
+      ...exp,
+      context_verification: exp.context_verification || null
+    },
     _isImageResult: true,
   };
   return normalized;
@@ -475,8 +479,13 @@ export async function getResult(id) {
   }
 }
 
-export async function downloadReport(id) {
-  const res = await api.get(`/report/${id}`, { responseType: 'blob' });
+export async function downloadReport(id, overrideScore, overrideVerdict) {
+  const params = new URLSearchParams();
+  if (overrideScore !== undefined) params.append('score', overrideScore);
+  if (overrideVerdict !== undefined) params.append('verdict', overrideVerdict.toUpperCase());
+  
+  const q = params.toString() ? `?${params.toString()}` : '';
+  const res = await api.get(`/report/${id}${q}`, { responseType: 'blob' });
   return res.data;
 }
 

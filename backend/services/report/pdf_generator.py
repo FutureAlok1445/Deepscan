@@ -1,343 +1,469 @@
 import io
+import re
 import time
-from reportlab.lib.pagesizes import letter
-from reportlab.lib.units import inch
-from reportlab.lib.colors import HexColor, white, black
-from reportlab.pdfgen import canvas
-from reportlab.lib.enums import TA_CENTER, TA_LEFT
 from loguru import logger
 
+from reportlab.lib.pagesizes import letter
+from reportlab.lib import colors
+from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+from reportlab.lib.units import inch
+from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle, PageBreak, KeepTogether
+from reportlab.platypus.flowables import HRFlowable
+from reportlab.lib.enums import TA_CENTER, TA_LEFT, TA_RIGHT
 
-# Brand colors
-DS_BG = HexColor("#0a0a0f")
-DS_RED = HexColor("#ff3c00")
-DS_CYAN = HexColor("#00f5ff")
-DS_GREEN = HexColor("#39ff14")
-DS_YELLOW = HexColor("#ffd700")
-DS_SILVER = HexColor("#e0e0e0")
-DS_ORANGE = HexColor("#ff8c00")
+def hx(c) -> str:
+    """Return a 6-char lowercase hex string (no #) from a ReportLab color."""
+    r = int(c.red * 255)
+    g = int(c.green * 255)
+    b = int(c.blue * 255)
+    return f"{r:02x}{g:02x}{b:02x}"
+
+# ─── Brand Palette (matches DeepScan dark UI) ─────────────────────────────────
+DS_BG       = colors.HexColor("#0a0a0f")      # near-black bg
+DS_PANEL    = colors.HexColor("#12121a")      # card bg
+DS_CYAN     = colors.HexColor("#00f5ff")      # ds-cyan  
+DS_BLUE     = colors.HexColor("#0f172a")      # dark text
+DS_ACCENT   = colors.HexColor("#1e3a5f")      # blue accent
+DS_SILVER   = colors.HexColor("#c8d0dc")      # body text
+DS_DIM      = colors.HexColor("#6b7280")      # dim text
+DS_RED      = colors.HexColor("#ef4444")
+DS_ORANGE   = colors.HexColor("#f97316")
+DS_YELLOW   = colors.HexColor("#eab308")
+DS_GREEN    = colors.HexColor("#22c55e")
+DS_WHITE    = colors.HexColor("#f8fafc")
+DS_BORDER   = colors.HexColor("#1e293b")
 
 VERDICT_COLORS = {
-    "AUTHENTIC": DS_GREEN,
-    "UNCERTAIN": DS_YELLOW,
-    "LIKELY_FAKE": DS_ORANGE,
+    "AUTHENTIC":       DS_GREEN,
+    "UNCERTAIN":       DS_YELLOW,
+    "LIKELY_FAKE":     DS_ORANGE,
     "DEFINITELY_FAKE": DS_RED,
+    "POSSIBLY MANIPULATED": DS_YELLOW,
+    "LIKELY AI":       DS_ORANGE,
+    "CONFIRMED AI":    DS_RED,
 }
+
+ENGINE_NAMES = {
+    "visual forensics": "Visual Forensics (MAS)",
+    "facial proportion": "Facial Geometry & Proportions",
+    "frequency fingerprint": "Frequency & Spectrum Analysis",
+    "context validity": "Metadata & Contextual Integrity",
+    "diffusion noise": "Generative Diffusion Noise",
+}
+
+def _parse_finding(f: dict):
+    """Parse a backend finding dict into (engine_name, anomaly_score, detail)."""
+    engine = f.get("engine", "Unknown Indicator")
+    raw_detail = f.get("detail", "")
+    final_detail = raw_detail
+
+    try:
+        f_score = float(f.get("score", 0) or 0)
+    except (ValueError, TypeError):
+        f_score = 0.0
+
+    match = re.search(
+        r'^([\w\s]+?)\s*score:\s*([\d.]+)/100\.?\s*(.*)$',
+        raw_detail, re.IGNORECASE | re.DOTALL
+    )
+    if match:
+        raw_name = match.group(1).strip().lower()
+        for key, label in ENGINE_NAMES.items():
+            if key in raw_name:
+                engine = label
+                break
+        else:
+            engine = match.group(1).strip().title()
+
+        auth_score = float(match.group(2))
+        f_score = max(0.0, min(100.0, 100.0 - round(auth_score)))
+        final_detail = match.group(3).strip() or "No specific description provided."
+    else:
+        val_match = re.search(r'([\d.]+)/100', raw_detail)
+        if val_match:
+            f_score = max(0.0, min(100.0, 100.0 - round(float(val_match.group(1)))))
+
+    return engine, f_score, final_detail
+
+
+def _score_color(score: float) -> colors.HexColor:
+    if score >= 75: return DS_RED
+    if score >= 50: return DS_ORANGE
+    if score >= 35: return DS_YELLOW
+    return DS_GREEN
+
+
+def _add_page_header(canvas, doc):
+    """Draw a professional clean header on every page."""
+    w, h = letter
+    canvas.saveState()
+    # Top thin accent line
+    canvas.setFillColor(DS_ACCENT)
+    canvas.rect(0, h - 3, w, 3, fill=1, stroke=0)
+    
+    # Brand label (Blue / Black)
+    canvas.setFont("Helvetica-Bold", 11)
+    canvas.setFillColor(DS_BLUE)
+    canvas.drawString(0.75 * inch, h - 36, "DEEPSCAN")
+    canvas.setFont("Helvetica", 11)
+    canvas.setFillColor(colors.HexColor("#334155"))
+    canvas.drawString(0.75 * inch + 75, h - 36, "| Forensic Intelligence Report")
+    
+    # Page number right
+    canvas.setFont("Helvetica", 10)
+    canvas.setFillColor(colors.HexColor("#64748b"))
+    canvas.drawRightString(w - 0.75 * inch, h - 36, f"PAGE {doc.page}")
+    
+    # Bottom footer line
+    canvas.setFillColor(colors.HexColor("#e2e8f0"))
+    canvas.rect(0.75 * inch, 0.5 * inch, w - 1.5 * inch, 1, fill=1, stroke=0)
+    canvas.setFont("Helvetica", 8)
+    canvas.setFillColor(colors.HexColor("#94a3b8"))
+    canvas.drawString(0.75 * inch, 0.35 * inch, "CONFIDENTIAL — DEEPSCAN AI ENGINE — SYSTEM GENERATED FORENSICS")
+    canvas.drawRightString(w - 0.75 * inch, 0.35 * inch, time.strftime('%Y-%m-%d %H:%M UTC'))
+    canvas.restoreState()
 
 
 class PdfGenerator:
-    """Generate a comprehensive forensic PDF report for a DeepScan analysis."""
+    """Generates a multi-page, dark-themed forensic PDF report for DeepScan."""
 
     def create_report(self, data: dict) -> io.BytesIO:
         buf = io.BytesIO()
-        c = canvas.Canvas(buf, pagesize=letter)
-        w, h = letter  # 612 x 792
 
+        doc = SimpleDocTemplate(
+            buf,
+            pagesize=letter,
+            rightMargin=0.75 * inch,
+            leftMargin=0.75 * inch,
+            topMargin=0.85 * inch,
+            bottomMargin=0.65 * inch,
+        )
+
+        styles = getSampleStyleSheet()
+
+        # ─ Style definitions ─
+        def mk(name, base="Normal", **kw):
+            return ParagraphStyle(name=name, parent=styles[base], **kw)
+
+        BLACK       = colors.HexColor("#000000")
+        DARK_GRAY   = colors.HexColor("#222222")
+        MID_GRAY    = colors.HexColor("#444444")
+        ACCENT_BLUE = colors.HexColor("#1e40af") # Professional Navy Blue
+        DS_LT_BLUE  = colors.HexColor("#eff6ff")
+
+        title_style   = mk("Title",    "Normal", fontSize=34, textColor=BLACK,       fontName="Helvetica-Bold", spaceAfter=6,  leading=40)
+        subtitle_style= mk("Sub",      "Normal", fontSize=14, textColor=MID_GRAY,    spaceAfter=6)
+        label_style   = mk("Label",    "Normal", fontSize=12, textColor=MID_GRAY,    fontName="Helvetica-Bold", spaceBefore=10)
+        score_style   = mk("Score",    "Normal", fontSize=50, textColor=ACCENT_BLUE, fontName="Helvetica-Bold", leading=58)
+        body_style    = mk("Body",     "Normal", fontSize=13, textColor=BLACK,       leading=20)
+        section_style = mk("Section",  "Normal", fontSize=18, textColor=ACCENT_BLUE, fontName="Helvetica-Bold", spaceBefore=22, spaceAfter=10)
+        finding_h     = mk("FindH",    "Normal", fontSize=15, textColor=BLACK,       fontName="Helvetica-Bold", spaceAfter=6,  spaceBefore=14)
+        finding_body  = mk("FindBody", "Normal", fontSize=12, textColor=DARK_GRAY,   leading=18)
+        warn_style    = mk("Warn",     "Normal", fontSize=12, textColor=colors.HexColor("#b91c1c"), fontName="Helvetica-Bold")
+        caption_style = mk("Caption",  "Normal", fontSize=10, textColor=MID_GRAY,    leading=14)
+
+        # ─ Parse data ─
+        raw_score   = data.get("aacs_score", data.get("score", 0))
+        score_val   = float(raw_score) if raw_score is not None else 0.0
+        verdict     = data.get("verdict", "UNKNOWN").replace("_", " ").upper()
+        v_color     = VERDICT_COLORS.get(verdict, DS_DIM)
+        scan_id     = data.get("id", "N/A")
+        file_type   = data.get("file_type", "Unknown")
+        file_type_clean = file_type.replace("image/", "").replace("video/", "").upper() or file_type.upper()
+        findings    = data.get("findings", [])
+        narrative   = data.get("narrative", {})
+        sub_scores  = data.get("sub_scores", {})
+        ltca        = data.get("ltca_data", {})
+
+        # Dynamic Summary (Mirrored from Frontend logic)
+        if score_val > 70:
+            summary_text = "The analysis reveals strong evidence of AI generation or deep manipulation. Multiple forensic layers triggered high-confidence warnings across structural, frequency, and pixel-level domains. These elements strongly suggest a sophisticated composite image likely created or enhanced with generative AI techniques."
+        elif score_val > 35:
+            summary_text = "The analysis reveals partial anomalies consistent with localized manipulation or light AI filtering. While some regions remain authentic, conflicting signals in compression or error levels warrant moderate caution."
+        else:
+            summary_text = "The analysis confirms the integrity of the image. Key indicators such as natural noise distribution, consistent physical lighting, and correct pixel-level error characteristics align perfectly with a genuine photograph. No significant AI artifacts were detected."
+
+        technical_text = narrative.get("technical", "")
+
+        date_str = time.strftime('%d %B %Y, %H:%M UTC')
+
+        # ═══════════════════════════════════════════════════════════════════════
+        # PAGE 1 — CLEAN COVER + SUMMARY
+        # ═══════════════════════════════════════════════════════════════════════
+        story = []
+
+        # ─ Top spacer (header strip already drawn by _add_page_header) ─
+        story.append(Spacer(1, 10))
+
+        # ─ Report title (clean, left-aligned) ─
+        story.append(Paragraph("Detection Report", title_style))
+        story.append(HRFlowable(width="100%", color=ACCENT_BLUE, thickness=2, spaceAfter=10))
+
+        # ─ Meta row: Image Type | Scan ID | Date ─
+        meta_rows = [[
+            Paragraph(f"<b>Image Type:</b>  {file_type_clean}", mk("M1","Normal",fontSize=12,textColor=BLACK,fontName="Helvetica")),
+            Paragraph(f"<b>Scan ID:</b>  {scan_id}", mk("M2","Normal",fontSize=12,textColor=BLACK,fontName="Helvetica")),
+            Paragraph(f"<b>Date:</b>  {date_str}", mk("M3","Normal",fontSize=12,textColor=BLACK,fontName="Helvetica")),
+        ]]
+        meta_table = Table(meta_rows, colWidths=["33%", "34%", "33%"])
+        meta_table.setStyle(TableStyle([
+            ("ALIGN",  (0,0), (-1,-1), "LEFT"),
+            ("VALIGN", (0,0), (-1,-1), "MIDDLE"),
+            ("TOPPADDING",    (0,0), (-1,-1), 0),
+            ("BOTTOMPADDING", (0,0), (-1,-1), 0),
+        ]))
+        story.append(meta_table)
+        story.append(Spacer(1, 18))
+
+        # ─ Score + Verdict side by side ─
+        score_color_val = _score_color(score_val)
+        verdict_para = Paragraph(
+            f"<font color='#{hx(v_color)}'><b>{verdict}</b></font>",
+            mk("VerdictBig","Normal",fontSize=20,fontName="Helvetica-Bold",leading=24)
+        )
+
+        score_block = Table(
+            [[
+                Paragraph(f"<font color='#{hx(v_color)}'><b>{score_val:.0f}%</b></font>",
+                          mk("ScoreBig","Normal",fontSize=64,fontName="Helvetica-Bold",leading=72,textColor=ACCENT_BLUE)),
+                Paragraph(
+                    f"<font color='#000000' size=18><b>Overall Forgery Score</b></font><br/><br/>"
+                    f"<font color='#{hx(v_color)}' size=22><b>{verdict}</b></font>",
+                    mk("ScoreSide","Normal",fontSize=16,fontName="Helvetica-Bold",leading=26,textColor=BLACK)
+                )
+            ]],
+            colWidths=[2.2*inch, 4.0*inch]
+        )
+        score_block.setStyle(TableStyle([
+            ("VALIGN", (0,0), (-1,-1), "MIDDLE"),
+            ("TOPPADDING",    (0,0), (-1,-1), 24),
+            ("BOTTOMPADDING", (0,0), (-1,-1), 24),
+            ("LEFTPADDING",   (0,0), (-1,-1), 24),
+            ("BACKGROUND",    (0,0), (-1,-1), colors.HexColor("#f8fafc")),
+            ("LINEBELOW",     (0,0), (-1,-1), 4, ACCENT_BLUE),
+        ]))
+        story.append(score_block)
+        story.append(Spacer(1, 24))
+
+        # ─ Analysis Summary ─
+        story.append(Paragraph("Analysis Summary", section_style))
+        story.append(HRFlowable(width="100%", color=ACCENT_BLUE, thickness=1, spaceAfter=10))
+        story.append(Paragraph(summary_text.replace('\n', '<br/>'), body_style))
+        story.append(Spacer(1, 24))
+
+        # ─ Detailed Breakdown (Page 1 continues) ─
+        story.append(Paragraph("Detailed Breakdown", section_style))
+        story.append(HRFlowable(width="100%", color=DS_BORDER, thickness=1, spaceAfter=8))
+
+        parsed_findings = [_parse_finding(f) for f in findings]
+
+        for engine, f_score, detail in parsed_findings:
+            warning = ""
+            if f_score >= 50:
+                warning = f"  <font color='#{hx(colors.HexColor('#b91c1c'))}'>(WARNING)</font>"
+            fc = _score_color(f_score)
+            block = KeepTogether([
+                Paragraph(
+                    f"<font color='#{hx(fc)}'><b>{engine} | {f_score:.0f}%</b></font>{warning}",
+                    finding_h
+                ),
+                Spacer(1, 2),
+                Paragraph(detail, finding_body),
+                HRFlowable(width="100%", color=colors.HexColor("#e2e8f0"), thickness=1, spaceAfter=8),
+            ])
+            story.append(block)
+
+        # ─ Footer disclaimer on page 1 ─
+        story.append(Spacer(1, 20))
+        story.append(HRFlowable(width="100%", color=ACCENT_BLUE, thickness=0.5, spaceAfter=8))
+        story.append(Paragraph(
+            "This report is generated algorithmically by the DeepScan AI Engine. Scores represent model confidence "
+            "based on pixel-level, geometric, frequency, and medieval analysis. Results should be interpreted by a qualified forensic analyst.",
+            caption_style
+        ))
+
+        # ══════════════════════════════════════
+        # SECTION 2 — SENSOR & COMPONENT SCORES
+        # ══════════════════════════════════════
+        story.append(Spacer(1, 30))
+        story.append(Paragraph("Forensic Sensor Deep-Dive", title_style))
+        story.append(HRFlowable(width="100%", color=ACCENT_BLUE, thickness=2, spaceAfter=14))
+
+        # ─ Score table ─
+        if parsed_findings:
+            story.append(Paragraph("Risk Score Matrix", section_style))
+            story.append(HRFlowable(width="100%", color=DS_BORDER, thickness=1, spaceAfter=8))
+
+            table_data = [
+                [
+                    Paragraph("<b>SENSOR / INDICATOR</b>", mk("TH","Normal",fontSize=10,textColor=BLACK,fontName="Helvetica-Bold")),
+                    Paragraph("<b>ANOMALY RISK</b>", mk("TH2","Normal",fontSize=10,textColor=BLACK,fontName="Helvetica-Bold",alignment=TA_CENTER)),
+                    Paragraph("<b>STATUS</b>", mk("TH3","Normal",fontSize=10,textColor=BLACK,fontName="Helvetica-Bold",alignment=TA_CENTER)),
+                    Paragraph("<b>OBSERVATION</b>", mk("TH4","Normal",fontSize=10,textColor=BLACK,fontName="Helvetica-Bold")),
+                ]
+            ]
+
+            row_styles = [
+                ("BACKGROUND",    (0, 0), (-1, 0), DS_LT_BLUE),
+                ("GRID",          (0, 0), (-1,-1), 0.5, colors.HexColor("#cbd5e1")),
+                ("ALIGN",         (1, 1), (2, -1), "CENTER"),
+                ("VALIGN",        (0, 0), (-1,-1), "MIDDLE"),
+                ("TOPPADDING",    (0, 0), (-1,-1), 10),
+                ("BOTTOMPADDING", (0, 0), (-1,-1), 10),
+                ("LEFTPADDING",    (0, 0), (-1,-1), 8),
+            ]
+
+            for i, (engine, f_score, detail) in enumerate(parsed_findings):
+                fc = _score_color(f_score)
+                status = "⚠ WARNING" if f_score >= 50 else "✓ CLEAR"
+                status_color = colors.HexColor("#b91c1c") if f_score >= 50 else colors.HexColor("#15803d")
+                bg = colors.HexColor("#fff1f2") if f_score >= 50 else colors.white
+                row_styles.append(("BACKGROUND", (0, i+1), (-1, i+1), bg))
+
+                table_data.append([
+                    Paragraph(f"<b>{engine}</b>", mk(f"EN{i}","Normal",fontSize=10,textColor=BLACK,fontName="Helvetica-Bold")),
+                    Paragraph(
+                        f"<font color='#{hx(fc)}'><b>{f_score:.0f}%</b></font>",
+                        mk(f"SC{i}","Normal",fontSize=13,fontName="Helvetica-Bold",alignment=TA_CENTER)
+                    ),
+                    Paragraph(
+                        f"<font color='#{hx(status_color)}'><b>{status}</b></font>",
+                        mk(f"ST{i}","Normal",fontSize=10,fontName="Helvetica-Bold",alignment=TA_CENTER)
+                    ),
+                    Paragraph(detail, mk(f"DT{i}","Normal",fontSize=10,textColor=BLACK,leading=14)),
+                ])
+
+            risk_table = Table(table_data, colWidths=[2.1*inch, 1.1*inch, 1.1*inch, 2.7*inch])
+            risk_table.setStyle(TableStyle(row_styles))
+            story.append(risk_table)
+            story.append(Spacer(1, 22))
+
+        # ─ Sub-scores grid (if available) ─
+        if sub_scores:
+            story.append(Paragraph("Component Confidence Grid", section_style))
+            story.append(HRFlowable(width="100%", color=DS_BORDER, thickness=1, spaceAfter=8))
+
+            items = list(sub_scores.items())
+            grid_data = []
+            for i in range(0, len(items), 3):
+                chunk = items[i:i+3]
+                row = []
+                for k, v in chunk:
+                    label = k.replace("_", " ").title()
+                    try:
+                        pct = float(v)
+                    except (ValueError, TypeError):
+                        pct = 0.0
+                    fc = _score_color(100 - pct) if pct > 0 else DS_DIM
+                    row.append(Paragraph(
+                        f"<font color='#{hx(DS_DIM)}'>{label}</font><br/>"
+                         f"<font color='#{hx(fc)}'><b>{pct:.1f}%</b></font>",
+                        mk(f"GS{k}","Normal",fontSize=9,leading=14,alignment=TA_CENTER)
+                    ))
+                while len(row) < 3:
+                    row.append(Paragraph("", body_style))
+                grid_data.append(row)
+
+            grid = Table(grid_data, colWidths=["33%","34%","33%"])
+            grid.setStyle(TableStyle([
+                ("BOX",           (0,0), (-1,-1), 1, colors.HexColor("#cbd5e1")),
+                ("INNERGRID",     (0,0), (-1,-1), 0.5, colors.HexColor("#e2e8f0")),
+                ("BACKGROUND",    (0,0), (-1,-1), colors.HexColor("#f8fafc")),
+                ("ALIGN",         (0,0), (-1,-1), "CENTER"),
+                ("VALIGN",        (0,0), (-1,-1), "MIDDLE"),
+                ("TOPPADDING",    (0,0), (-1,-1), 12),
+                ("BOTTOMPADDING", (0,0), (-1,-1), 12),
+            ]))
+            story.append(grid)
+            story.append(Spacer(1, 22))
+
+        # ─ Technical Notes ─
+        if technical_text:
+            story.append(Paragraph("Technical Analysis Notes", section_style))
+            story.append(HRFlowable(width="100%", color=DS_BORDER, thickness=1, spaceAfter=8))
+            story.append(Paragraph(technical_text.replace('\n', '<br/>'), body_style))
+            story.append(Spacer(1, 16))
+
+        # ══════════════════════════════════════
+        # SECTION 3 — VERDICT STAMP
+        # ══════════════════════════════════════
+        story.append(Spacer(1, 30))
+ 
+        story.append(Paragraph("Final Verdict", title_style))
+        story.append(HRFlowable(width="100%", color=ACCENT_BLUE, thickness=2, spaceAfter=20))
+
+        # Large verdict card
+        verdict_card_data = [[
+            Paragraph(
+                f"<font color='#{hx(v_color)}'><b>{verdict}</b></font>",
+                mk("VFinal","Normal",fontSize=32,fontName="Helvetica-Bold",leading=38,alignment=TA_CENTER)
+            )
+        ]]
+        verdict_card = Table(verdict_card_data, colWidths=["100%"])
+        verdict_card.setStyle(TableStyle([
+            ("BACKGROUND",    (0,0), (-1,-1), colors.HexColor("#f8fafc")),
+            ("ALIGN",         (0,0), (-1,-1), "CENTER"),
+            ("TOPPADDING",    (0,0), (-1,-1), 32),
+            ("BOTTOMPADDING", (0,0), (-1,-1), 32),
+            ("BOX",           (0,0), (-1,-1), 2, v_color),
+        ]))
+        story.append(verdict_card)
+        story.append(Spacer(1, 20))
+
+        # Verdict explanation grid
+        verdict_explanation = {
+            "AUTHENTIC": "No significant AI generation or manipulation artifacts detected. The image exhibits characteristics consistent with real-world camera capture including natural noise patterns, lens artifacts, and consistent physical lighting.",
+            "UNCERTAIN": "The image presents an ambiguous forensic profile. Some anomalies were detected but are not conclusive. Manual review is recommended before drawing definitive conclusions.",
+            "POSSIBLE MANIPULATION": "Partial anomalies consistent with localized editing or light AI filtering were detected. While some regions appear authentic, conflicting signals in compression and pixel-level error levels suggest selective manipulation.",
+            "LIKELY AI": "Multiple AI generation indicators detected across several forensic domains. The image likely originates from a generative model such as a diffusion model or GAN.",
+            "LIKELY FAKE": "Multiple AI generation indicators detected across several forensic domains. The image likely originates from a generative model such as a diffusion model or GAN.",
+            "CONFIRMED AI": "Strong and conclusive evidence of AI generation. Multiple sensor layers—frequency, geometry, texture, and statistical—all concur that this content was produced by a generative AI system.",
+            "DEFINITELY FAKE": "Strong and conclusive evidence of AI generation. Multiple sensor layers—frequency, geometry, texture, and statistical—all concur that this content was produced by a generative AI system.",
+        }
+        exp_text = verdict_explanation.get(verdict, summary_text)
+        story.append(Paragraph(exp_text, body_style))
+        story.append(Spacer(1, 28))
+
+        # Summary stats row  
+        stats_data = [[
+            Paragraph(
+                f"<font color='#64748b'>OVERALL RISK</font><br/><font color='#{hx(v_color)}'><b>{score_val:.0f}%</b></font>",
+                mk("Stat1","Normal",fontSize=14,fontName="Helvetica-Bold",leading=20,alignment=TA_CENTER)
+            ),
+            Paragraph(
+                f"<font color='#64748b'>SENSORS FIRED</font><br/><font color='#b91c1c'><b>{len([x for x in parsed_findings if x[1] >= 50])}/{len(parsed_findings)}</b></font>",
+                mk("Stat2","Normal",fontSize=14,fontName="Helvetica-Bold",leading=20,alignment=TA_CENTER)
+            ),
+            Paragraph(
+                f"<font color='#64748b'>SCAN ID</font><br/><font color='#1e293b'><b>#{str(scan_id)[:8]}</b></font>",
+                mk("Stat3","Normal",fontSize=14,fontName="Helvetica-Bold",leading=20,alignment=TA_CENTER)
+            ),
+        ]]
+        stats_table = Table(stats_data, colWidths=["33%","34%","33%"])
+        stats_table.setStyle(TableStyle([
+            ("BACKGROUND",    (0,0), (-1,-1), colors.HexColor("#f1f5f9")),
+            ("ALIGN",         (0,0), (-1,-1), "CENTER"),
+            ("VALIGN",        (0,0), (-1,-1), "MIDDLE"),
+            ("TOPPADDING",    (0,0), (-1,-1), 16),
+            ("BOTTOMPADDING", (0,0), (-1,-1), 16),
+            ("BOX",           (0,0), (-1,-1), 1, colors.HexColor("#cbd5e1")),
+        ]))
+        story.append(stats_table)
+        story.append(Spacer(1, 30))
+
+        story.append(HRFlowable(width="100%", color=DS_CYAN, thickness=0.5, spaceAfter=8))
+        story.append(Paragraph(
+            "DeepScan Forensic Intelligence Platform — Automated Forensic Report\n"
+            "This document is system-generated and should be reviewed by a qualified forensic analyst. "
+            "DeepScan takes no legal liability for actions taken based solely on this report.",
+            caption_style
+        ))
+
+        # Build with branded header on every page
         try:
-            self._draw_page_1(c, data, w, h)
-            c.showPage()
-            self._draw_page_2(c, data, w, h)
-            c.showPage()
-            self._draw_page_3(c, data, w, h)
+            doc.build(story, onFirstPage=_add_page_header, onLaterPages=_add_page_header)
         except Exception as e:
-            logger.error(f"PDF generation error: {e}")
+            logger.error(f"Failed to build PDF: {e}")
 
-        c.save()
         buf.seek(0)
         return buf
-
-    # ───────────────────── Page 1: Header + AACS Score + Verdict ─────────────
-    def _draw_page_1(self, c, data, w, h):
-        # Dark background
-        c.setFillColor(DS_BG)
-        c.rect(0, 0, w, h, fill=1)
-
-        # Top bar
-        c.setFillColor(DS_RED)
-        c.rect(0, h - 60, w, 60, fill=1)
-        c.setFillColor(white)
-        c.setFont("Helvetica-Bold", 22)
-        c.drawString(30, h - 42, "DEEPSCAN — FORENSIC ANALYSIS REPORT")
-
-        # Report metadata
-        y = h - 90
-        c.setFont("Helvetica", 10)
-        c.setFillColor(DS_SILVER)
-        c.drawString(30, y, f"Report ID: {data.get('id', 'N/A')}")
-        c.drawString(300, y, f"Generated: {time.strftime('%Y-%m-%d %H:%M UTC')}")
-        y -= 16
-        c.drawString(30, y, f"File: {data.get('original_filename', data.get('filename', 'N/A'))}")
-        c.drawString(300, y, f"Type: {data.get('file_type', 'N/A').upper()}")
-        y -= 16
-        c.drawString(30, y, f"Analysis Time: {data.get('elapsed_seconds', 0)}s")
-
-        # ─── AACS Score Circle ───
-        aacs = data.get("aacs_score", data.get("score", 0))
-        verdict = data.get("verdict", "UNKNOWN")
-        v_color = VERDICT_COLORS.get(verdict, DS_SILVER)
-
-        # Large score display
-        y -= 50
-        c.setFillColor(v_color)
-        c.setFont("Helvetica-Bold", 72)
-        score_text = f"{aacs:.0f}"
-        c.drawCentredString(w / 2, y - 20, score_text)
-        c.setFont("Helvetica", 14)
-        c.drawCentredString(w / 2, y - 40, "AACS SCORE (0-100)")
-
-        # Verdict badge
-        y -= 70
-        badge_w = 220
-        badge_h = 36
-        bx = (w - badge_w) / 2
-        c.setFillColor(v_color)
-        c.roundRect(bx, y, badge_w, badge_h, 6, fill=1)
-        c.setFillColor(black)
-        c.setFont("Helvetica-Bold", 18)
-        c.drawCentredString(w / 2, y + 10, verdict.replace("_", " "))
-
-        # ─── Sub-Scores ───
-        y -= 60
-        c.setFillColor(DS_CYAN)
-        c.setFont("Helvetica-Bold", 14)
-        c.drawString(30, y, "SUB-SCORE BREAKDOWN")
-        y -= 5
-        c.setStrokeColor(DS_CYAN)
-        c.line(30, y, w - 30, y)
-
-        sub_scores = data.get("sub_scores", {})
-        labels = [
-            ("MAS", "Media Authenticity Score", 0.30),
-            ("PPS", "Physiological Plausibility", 0.25),
-            ("IRS", "Information Reliability", 0.20),
-            ("AAS", "Acoustic Anomaly Score", 0.15),
-            ("CVS", "Context Verification", 0.10),
-        ]
-        y -= 30
-        for abbr, name, weight in labels:
-            val = sub_scores.get(abbr.lower(), 0)
-            # Label
-            c.setFillColor(DS_SILVER)
-            c.setFont("Helvetica-Bold", 11)
-            c.drawString(40, y, f"{abbr} — {name}")
-            c.setFont("Helvetica", 10)
-            c.drawString(320, y, f"Weight: {weight:.0%}")
-            # Bar background
-            bar_x, bar_y, bar_w, bar_h = 410, y - 2, 150, 14
-            c.setFillColor(HexColor("#1a1a2e"))
-            c.rect(bar_x, bar_y, bar_w, bar_h, fill=1)
-            # Bar fill
-            fill_w = bar_w * (val / 100.0)
-            bar_color = DS_GREEN if val < 30 else DS_YELLOW if val < 60 else DS_ORANGE if val < 85 else DS_RED
-            c.setFillColor(bar_color)
-            c.rect(bar_x, bar_y, fill_w, bar_h, fill=1)
-            # Score text
-            c.setFillColor(white)
-            c.setFont("Helvetica-Bold", 9)
-            c.drawCentredString(bar_x + bar_w + 20, y, f"{val:.1f}")
-            y -= 28
-
-        # ─── CDCF Fusion ───
-        fusion = data.get("fusion", {})
-        y -= 20
-        c.setFillColor(DS_CYAN)
-        c.setFont("Helvetica-Bold", 14)
-        c.drawString(30, y, "CDCF FUSION ANALYSIS")
-        y -= 5
-        c.line(30, y, w - 30, y)
-        y -= 20
-        c.setFillColor(DS_SILVER)
-        c.setFont("Helvetica", 10)
-        c.drawString(40, y, f"Multiplier: {fusion.get('multiplier', 1.0):.2f}x")
-        y -= 16
-        contradictions = fusion.get("contradictions", [])
-        c.drawString(40, y, f"Contradictions: {len(contradictions)}")
-        if contradictions:
-            y -= 16
-            c.drawString(60, y, ", ".join(contradictions))
-        y -= 16
-        c.drawString(40, y, f"Note: {fusion.get('confidence_note', 'N/A')}")
-
-        # Footer
-        c.setFillColor(HexColor("#333333"))
-        c.rect(0, 0, w, 30, fill=1)
-        c.setFillColor(DS_SILVER)
-        c.setFont("Helvetica", 8)
-        c.drawCentredString(w / 2, 10, "DeepScan AACS v1.0 — Team Bug Bytes — HackHive 2.0 — Datta Meghe College of Engineering, Airoli")
-
-    # ───────────────────── Page 2: Findings + Forensics ──────────────────────
-    def _draw_page_2(self, c, data, w, h):
-        c.setFillColor(DS_BG)
-        c.rect(0, 0, w, h, fill=1)
-
-        # Header
-        c.setFillColor(DS_RED)
-        c.rect(0, h - 40, w, 40, fill=1)
-        c.setFillColor(white)
-        c.setFont("Helvetica-Bold", 16)
-        c.drawString(30, h - 28, "DETECTION FINDINGS")
-
-        y = h - 70
-        findings = data.get("findings", [])
-        for i, finding in enumerate(findings[:12]):
-            engine = finding.get("engine", "Unknown")
-            score = finding.get("score", 0)
-            detail = finding.get("detail", "")
-            color = DS_GREEN if score < 30 else DS_YELLOW if score < 60 else DS_ORANGE if score < 85 else DS_RED
-
-            c.setFillColor(color)
-            c.circle(40, y + 4, 4, fill=1)
-            c.setFillColor(DS_SILVER)
-            c.setFont("Helvetica-Bold", 10)
-            c.drawString(52, y, f"[{engine}] Score: {score:.1f}")
-            c.setFont("Helvetica", 9)
-            c.setFillColor(HexColor("#aaaaaa"))
-            # Truncate long detail
-            detail_display = detail[:80] + "..." if len(detail) > 80 else detail
-            c.drawString(52, y - 14, detail_display)
-            y -= 36
-            if y < 80:
-                break
-
-        # ─── Forensics Summary ───
-        forensics = data.get("forensics", {})
-        y -= 20
-        c.setFillColor(DS_CYAN)
-        c.setFont("Helvetica-Bold", 14)
-        c.drawString(30, y, "FORENSIC ANALYSIS")
-        y -= 5
-        c.setStrokeColor(DS_CYAN)
-        c.line(30, y, w - 30, y)
-        y -= 25
-
-        forensic_items = [
-            ("ELA", forensics.get("ela", {}).get("ela_score", "N/A"),
-             forensics.get("ela", {}).get("analysis_note", "")),
-            ("FFT", forensics.get("fft", {}).get("fft_score", "N/A") if forensics.get("fft") else "N/A",
-             "Frequency-domain manipulation detection"),
-            ("Noise", forensics.get("noise", {}).get("noise_score", "N/A") if forensics.get("noise") else "N/A",
-             "Noise pattern consistency analysis"),
-        ]
-
-        for name, score_val, note in forensic_items:
-            c.setFillColor(DS_SILVER)
-            c.setFont("Helvetica-Bold", 11)
-            c.drawString(40, y, f"{name} Score: {score_val}")
-            c.setFont("Helvetica", 9)
-            c.setFillColor(HexColor("#999999"))
-            c.drawString(200, y, note[:60])
-            y -= 22
-
-        # ─── Heartbeat / rPPG ───
-        heartbeat = data.get("heartbeat", {})
-        if heartbeat and heartbeat.get("heart_rate"):
-            y -= 20
-            c.setFillColor(DS_RED)
-            c.setFont("Helvetica-Bold", 14)
-            c.drawString(30, y, "rPPG PHYSIOLOGICAL ANALYSIS")
-            y -= 5
-            c.setStrokeColor(DS_RED)
-            c.line(30, y, w - 30, y)
-            y -= 25
-            c.setFillColor(DS_SILVER)
-            c.setFont("Helvetica", 11)
-            c.drawString(40, y, f"Detected Heart Rate: {heartbeat.get('heart_rate', 0):.0f} BPM")
-            y -= 18
-            c.drawString(40, y, f"Signal Confidence: {heartbeat.get('confidence', 0):.0%}")
-            y -= 18
-            note = heartbeat.get("analysis_note", "")
-            if note:
-                c.drawString(40, y, f"Note: {note}")
-
-        # Footer
-        c.setFillColor(HexColor("#333333"))
-        c.rect(0, 0, w, 30, fill=1)
-        c.setFillColor(DS_SILVER)
-        c.setFont("Helvetica", 8)
-        c.drawCentredString(w / 2, 10, "DeepScan AACS v1.0 — Confidential Forensic Report — Page 2")
-
-    # ───────────────────── Page 3: Narrative + Metadata ──────────────────────
-    def _draw_page_3(self, c, data, w, h):
-        c.setFillColor(DS_BG)
-        c.rect(0, 0, w, h, fill=1)
-
-        # Header
-        c.setFillColor(DS_RED)
-        c.rect(0, h - 40, w, 40, fill=1)
-        c.setFillColor(white)
-        c.setFont("Helvetica-Bold", 16)
-        c.drawString(30, h - 28, "AI NARRATIVE EXPLANATION")
-
-        y = h - 70
-        narrative = data.get("narrative", {})
-
-        sections = [
-            ("Summary", narrative.get("summary", "N/A")),
-            ("Simple Explanation (ELI5)", narrative.get("eli5", "N/A")),
-            ("Technical Analysis", narrative.get("technical", "N/A")),
-        ]
-
-        for title, text in sections:
-            c.setFillColor(DS_CYAN)
-            c.setFont("Helvetica-Bold", 12)
-            c.drawString(30, y, title)
-            y -= 18
-
-            # Word-wrap the text
-            c.setFillColor(DS_SILVER)
-            c.setFont("Helvetica", 9)
-            words = text.split()
-            line = ""
-            for word in words:
-                test = f"{line} {word}".strip()
-                if c.stringWidth(test, "Helvetica", 9) < w - 80:
-                    line = test
-                else:
-                    c.drawString(40, y, line)
-                    y -= 13
-                    line = word
-                if y < 80:
-                    break
-            if line:
-                c.drawString(40, y, line)
-                y -= 13
-            y -= 15
-            if y < 80:
-                break
-
-        # ─── Metadata ───
-        metadata = data.get("metadata", {})
-        if metadata and y > 200:
-            y -= 10
-            c.setFillColor(DS_CYAN)
-            c.setFont("Helvetica-Bold", 14)
-            c.drawString(30, y, "FILE METADATA")
-            y -= 5
-            c.setStrokeColor(DS_CYAN)
-            c.line(30, y, w - 30, y)
-            y -= 20
-
-            c.setFont("Helvetica", 9)
-            c.setFillColor(DS_SILVER)
-            important_keys = ["FileType", "ImageSize", "Software", "CreateDate",
-                              "ModifyDate", "Model", "GPSLatitude", "GPSLongitude",
-                              "Duration", "AudioBitrate", "VideoFrameRate"]
-            for key in important_keys:
-                if key in metadata and y > 60:
-                    val = str(metadata[key])[:60]
-                    c.drawString(40, y, f"{key}: {val}")
-                    y -= 14
-
-        # ─── AACS Formula ───
-        if y > 120:
-            y -= 20
-            c.setFillColor(DS_YELLOW)
-            c.setFont("Helvetica-Bold", 11)
-            c.drawString(30, y, "AACS Formula: ((0.30×MAS) + (0.25×PPS) + (0.20×IRS) + (0.15×AAS) + (0.10×CVS)) × CDCF")
-
-        # Footer
-        c.setFillColor(HexColor("#333333"))
-        c.rect(0, 0, w, 30, fill=1)
-        c.setFillColor(DS_SILVER)
-        c.setFont("Helvetica", 8)
-        c.drawCentredString(w / 2, 10, "DeepScan AACS v1.0 — Team Bug Bytes — Page 3 — END OF REPORT")
