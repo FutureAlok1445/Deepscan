@@ -26,6 +26,7 @@ import VideoDescription from '../components/analysis/VideoDescription';
 import ShareVerdict from '../components/accessibility/ShareVerdict';
 import DownloadReport from '../components/accessibility/DownloadReport';
 import ElaHeatmapViewer from '../components/analysis/ElaHeatmapViewer';
+import AnalysisReportGenerator from '../components/analysis/AnalysisReportGenerator';
 
 export default function Result() {
   const { id } = useParams();
@@ -179,21 +180,11 @@ export default function Result() {
           </div>
         )}
 
-        {/* --- Deep NLM Forensic Analysis --- */}
-        {result.ltca_data && result.ltca_data.nlm_report && (
-          <div className="result-section">
-            <BrutalCard className="!p-3 sm:!p-6 bg-ds-silver/5 border-l-4 sm:border-l-8 border-l-ds-cyan">
-              <h3 className="font-grotesk font-black text-ds-silver text-base sm:text-xl uppercase tracking-wider sm:tracking-widest mb-3 sm:mb-4 flex items-center gap-2">
-                <span className="text-ds-cyan">[NLM]</span> Deep Expert Analysis
-              </h3>
-              <div className="font-mono text-sm text-ds-silver/80 leading-relaxed space-y-4">
-                {result.ltca_data.nlm_report.split('\n\n').map((paragraph, i) => (
-                  <p key={i}>{paragraph}</p>
-                ))}
-              </div>
-            </BrutalCard>
-          </div>
-        )}
+        {/* --- Automatically Generated Analysis Report --- */}
+        <div className="result-section">
+          <AnalysisReportGenerator result={result} sysScore={displayScore} />
+        </div>
+
 
         {/* --- Secondary Metrics Grid --- */}
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 result-section items-start">
