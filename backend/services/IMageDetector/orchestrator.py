@@ -41,7 +41,7 @@ class ImageOrchestrator:
         except Exception as e:
             logger.error(f"ImageOrchestrator model initialization failed: {e}")
 
-    async def process_image(self, file: UploadFile, context_caption: str = None) -> dict:
+    async def process_image(self, file: UploadFile, context_caption: str = None, skip_lens: bool = False) -> dict:
         """
         Process an image through:
           1. Reference HF models (umm-maybe + Organika/sdxl-detector) → primary AI score
@@ -54,12 +54,12 @@ class ImageOrchestrator:
             pil_img = Image.open(io.BytesIO(content)).convert('RGB')
             
             import asyncio
-            return await asyncio.to_thread(self._process_image_sync, pil_img, context_caption)
+            return await asyncio.to_thread(self._process_image_sync, pil_img, context_caption, skip_lens)
         except Exception as e:
             logger.error(f"Image analysis failed: {e}")
             raise e
 
-    def _process_image_sync(self, pil_img: Image.Image, context_caption: str = None) -> dict:
+    def _process_image_sync(self, pil_img: Image.Image, context_caption: str = None, skip_lens: bool = False) -> dict:
         try:
             # Write temp file for layers that need a path (OpenCV / MediaPipe)
             with tempfile.NamedTemporaryFile(delete=False, suffix=".jpg") as tmp:
@@ -156,20 +156,22 @@ class ImageOrchestrator:
             }
             
             # ── Layer 11: Live Context Verification (Google Lens) ─────
-            # Upload the ACTUAL user image to Google Lens for real web matches
-            context_verification = context_search_service.search_by_image(pil_img)
-            
-            # Dynamically adjust CVS score (Context Verification Layer)
-            # If we found entities or domains, lower the CVS score (lower score = more authentic)
-            if context_verification and context_verification.get("success"):
-                found_count = len(context_verification.get("entities", [])) + len(context_verification.get("matching_domains", []))
-                if found_count > 3:
-                    score_cvs = max(5, score_cvs - 25) # High confidence web prevalence
-                elif found_count > 0:
-                    score_cvs = max(10, score_cvs - 15) # Moderate web prevalence
-            
-            # Re-update the signals dict with potentially adjusted CVS
-            signals["CVS"] = score_cvs
+            context_verification = None
+            if not skip_lens:
+                # Upload the ACTUAL user image to Google Lens for real web matches
+                context_verification = context_search_service.search_by_image(pil_img)
+                
+                # Dynamically adjust CVS score (Context Verification Layer)
+                # If we found entities or domains, lower the CVS score (lower score = more authentic)
+                if context_verification and context_verification.get("success"):
+                    found_count = len(context_verification.get("entities", [])) + len(context_verification.get("matching_domains", []))
+                    if found_count > 3:
+                        score_cvs = max(5, score_cvs - 25) # High confidence web prevalence
+                    elif found_count > 0:
+                        score_cvs = max(10, score_cvs - 15) # Moderate web prevalence
+                
+                # Re-update the signals dict with potentially adjusted CVS
+                signals["CVS"] = score_cvs
             
             deepfake_chance_aacs = fusion_learner.fuse(signals)
 

@@ -134,7 +134,7 @@ class DetectionOrchestrator:
                         import numpy as np
                         from backend.services.IMageDetector.orchestrator import image_orchestrator
 
-                        NUM_ANALYSIS_FRAMES = 60
+                        NUM_ANALYSIS_FRAMES = 30
                         total_frames = len(frames)
                         # Evenly sample up to 60 indices
                         if total_frames <= NUM_ANALYSIS_FRAMES:
@@ -189,7 +189,7 @@ class DetectionOrchestrator:
                                         return img_bytes_buf.read()
 
                                 try:
-                                    img_result = await image_orchestrator.process_image(_MockFile())
+                                    img_result = await image_orchestrator.process_image(_MockFile(), skip_lens=True)
                                     img_score = img_result.get("score", 0)
                                     img_signals = img_result.get("signals", {})
                                     img_verdict = img_result.get("verdict", "UNCERTAIN")
