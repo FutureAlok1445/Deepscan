@@ -169,7 +169,7 @@ export default function Result() {
   const isImage = result.file_type?.includes('image') || result.file_type === 'image';
   const isAudio = result.file_type?.includes('audio') || result.file_type === 'audio';
 
-  const verdict = VERDICT_CONFIG[result.verdict] || VERDICT_CONFIG.UNCERTAIN;
+  const verdict = VERDICT_CONFIG[result.verdict] || VERDICT_CONFIG.PARTIALLY_AI;
   const score = result.score ?? result.aacs_score ?? 0;
   const contextResult = result.context_result || result.context;
 
@@ -185,7 +185,7 @@ export default function Result() {
           >
             <ArrowLeft className="w-4 h-4" /> Back to Analyze
           </Link>
-          {isVideo && (
+          {(isVideo || isImage) && (
             <BrutalButton
               variant="secondary"
               size="sm"
@@ -196,9 +196,9 @@ export default function Result() {
           )}
         </div>
 
-        {/* --- Image Advanced Analysis Block --- */}
-        {result.file_type && result.file_type.includes('image') && result.forensics?.ela && (
-          <div className="space-y-6 result-section">
+        {/* --- Image ELA Heatmap Viewer (JET thermal, reference-quality) --- */}
+        {isImage && result.forensics?.ela && (
+          <div className="result-section">
             <ElaHeatmapViewer
               elaData={result.forensics.ela}
               imageFile={originalFile}
@@ -207,6 +207,8 @@ export default function Result() {
           </div>
         )}
 
+        {/* --- Simple Result View Toggle --- */}
+        {simpleMode ? (
         {/* --- AI Video Content Description --- */}
         {result.ltca_data?.video_description && (
           <div className="result-section">
@@ -274,7 +276,7 @@ export default function Result() {
             <SimpleResult
               aacs_score={score}
               verdict={verdict.label}
-              plain_reason={result.narrative || result.explainability?.text}
+              plain_reason={result.narrative || result.explainability?.text || "No detailed summary available."}
               action={{
                 label: 'Back to full report',
                 onClick: () => setSimpleMode(false),
@@ -284,64 +286,66 @@ export default function Result() {
           </div>
         ) : (
           <>
-            {/* ── Header Card (always visible) ── */}
-            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 result-section">
-              {/* Score gauge */}
-              <BrutalCard className="flex flex-col items-center justify-center lg:col-span-1">
-                <TrustScoreGauge score={score} size={typeof window !== 'undefined' && window.innerWidth < 640 ? 160 : 200} />
-                <div className="mt-3 text-center">
-                  <BrutalBadge
-                    variant={score >= 70 ? 'red' : score >= 40 ? 'yellow' : 'green'}
-                    pulse
-                  >
-                    {verdict.emoji} {verdict.label}
-                  </BrutalBadge>
-                </div>
-              </BrutalCard>
-
-              {/* Details */}
-              <BrutalCard className="lg:col-span-2 space-y-3">
-                <div className="flex items-start justify-between flex-wrap gap-2">
-                  <div>
-                    <h1 className="font-grotesk font-black text-xl sm:text-2xl text-ds-silver">
-                      Analysis Result
-                    </h1>
-                    <p className="text-xs font-mono text-ds-silver/40 mt-1">
-                      ID: {result.id || id} &bull; {formatDateTime(result.created_at)}
-                    </p>
+            {/* ── Header Card (hidden for video — dashboard owns scoring) ── */}
+            {!isVideo && (
+              <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 result-section">
+                {/* Score gauge */}
+                <BrutalCard className="flex flex-col items-center justify-center lg:col-span-1">
+                  <TrustScoreGauge score={score} size={typeof window !== 'undefined' && window.innerWidth < 640 ? 160 : 200} />
+                  <div className="mt-3 text-center">
+                    <BrutalBadge
+                      variant={score >= 70 ? 'red' : score >= 40 ? 'yellow' : 'green'}
+                      pulse
+                    >
+                      {verdict.emoji} {verdict.label}
+                    </BrutalBadge>
                   </div>
-                  <div className="flex items-center gap-2">
-                    <DownloadReport resultId={result.id || id} />
-                  </div>
-                </div>
+                </BrutalCard>
 
-                {result.filename && (
-                  <div className="flex items-center gap-4 p-3 bg-ds-bg border border-ds-silver/20 rounded-sm">
-                    <div className="text-xs font-mono text-ds-silver/50 space-y-0.5">
-                      <p>File: <span className="text-ds-silver">{result.filename}</span></p>
-                      {result.file_type && <p>Type: <span className="text-ds-silver capitalize">{result.file_type}</span></p>}
-                      {result.processing_time_ms && (
-                        <p>Processed in: <span className="text-ds-silver">{(result.processing_time_ms / 1000).toFixed(1)}s</span></p>
-                      )}
+                {/* Details */}
+                <BrutalCard className="lg:col-span-2 space-y-3">
+                  <div className="flex items-start justify-between flex-wrap gap-2">
+                    <div>
+                      <h1 className="font-grotesk font-black text-xl sm:text-2xl text-ds-silver">
+                        Analysis Result
+                      </h1>
+                      <p className="text-xs font-mono text-ds-silver/40 mt-1">
+                        ID: {result.id || id} &bull; {formatDateTime(result.created_at)}
+                      </p>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <DownloadReport resultId={result.id || id} />
                     </div>
                   </div>
-                )}
 
-                <ShareVerdict verdict={verdict.label} score={score} resultId={result.id || id} />
+                  {result.filename && (
+                    <div className="flex items-center gap-4 p-3 bg-ds-bg border border-ds-silver/20 rounded-sm">
+                      <div className="text-xs font-mono text-ds-silver/50 space-y-0.5">
+                        <p>File: <span className="text-ds-silver">{result.filename}</span></p>
+                        {result.file_type && <p>Type: <span className="text-ds-silver capitalize">{result.file_type}</span></p>}
+                        {result.processing_time_ms && (
+                          <p>Processed in: <span className="text-ds-silver">{(result.processing_time_ms / 1000).toFixed(1)}s</span></p>
+                        )}
+                      </div>
+                    </div>
+                  )}
 
-                <div className="flex items-baseline gap-3">
-                  <span className={`text-4xl sm:text-5xl font-grotesk font-black ${getScoreColor(score)}`}>
-                    {formatScore(score)}
-                  </span>
-                  <div>
-                    <span className="text-xs sm:text-sm font-mono text-ds-silver/40">AACS Score</span>
-                    <p className="text-[10px] font-mono text-ds-silver/25 mt-0.5">Higher = more likely AI-generated</p>
+                  <ShareVerdict verdict={verdict.label} score={score} resultId={result.id || id} />
+
+                  <div className="flex items-baseline gap-3">
+                    <span className={`text-4xl sm:text-5xl font-grotesk font-black ${getScoreColor(score)}`}>
+                      {formatScore(score)}
+                    </span>
+                    <div>
+                      <span className="text-xs sm:text-sm font-mono text-ds-silver/40">AACS Score</span>
+                      <p className="text-[10px] font-mono text-ds-silver/25 mt-0.5">Higher = more likely AI-generated</p>
+                    </div>
                   </div>
-                </div>
-              </BrutalCard>
-            </div>
+                </BrutalCard>
+              </div>
+            )}
 
-            {/* ══════════ VIDEO — New Tabbed Dashboard ══════════ */}
+            {/* ══════════ VIDEO — New Unified Dashboard ══════════ */}
             {isVideo && (
               <div className="result-section">
                 <VideoResultDashboard result={result} />

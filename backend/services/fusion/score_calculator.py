@@ -97,25 +97,10 @@ def calculate_aacs(scores: dict = None, mas: float = None, pps: float = None,
 
 
 def get_verdict(aacs: float) -> str:
-    """Map AACS 0-100 to verdict string. Never crashes."""
-    try:
-        aacs = float(aacs)
-    except (TypeError, ValueError):
-        return "Uncertain"
-    if aacs <= 30:
-        return "Authentic"
-    elif aacs <= 60:
-        return "Uncertain"
-    elif aacs <= 85:
-        return "Likely Fake"
-    else:
-        return "Definitely Fake"
-
+    if aacs <= 34: return "AUTHENTIC"
+    elif aacs <= 70: return "PARTIALLY_AI"
+    elif aacs <= 85: return "LIKELY_FAKE"
+    else: return "DEFINITELY_FAKE"
 
 def get_verdict_color(verdict: str) -> str:
-    return {
-        "Authentic": "green", "AUTHENTIC": "green",
-        "Uncertain": "yellow", "UNCERTAIN": "yellow",
-        "Likely Fake": "orange", "LIKELY_FAKE": "orange",
-        "Definitely Fake": "red", "DEFINITELY_FAKE": "red",
-    }.get(verdict, "gray")
+    return {"AUTHENTIC": "green", "PARTIALLY_AI": "yellow", "LIKELY_FAKE": "orange", "DEFINITELY_FAKE": "red"}.get(verdict, "gray")

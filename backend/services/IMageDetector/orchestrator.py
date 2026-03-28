@@ -52,7 +52,15 @@ class ImageOrchestrator:
         try:
             content = await file.read()
             pil_img = Image.open(io.BytesIO(content)).convert('RGB')
+            
+            import asyncio
+            return await asyncio.to_thread(self._process_image_sync, pil_img, context_caption)
+        except Exception as e:
+            logger.error(f"Image analysis failed: {e}")
+            raise e
 
+    def _process_image_sync(self, pil_img: Image.Image, context_caption: str = None) -> dict:
+        try:
             # Write temp file for layers that need a path (OpenCV / MediaPipe)
             with tempfile.NamedTemporaryFile(delete=False, suffix=".jpg") as tmp:
                 pil_img.save(tmp.name, format="JPEG", quality=95)

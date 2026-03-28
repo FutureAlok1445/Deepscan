@@ -490,13 +490,34 @@ export async function downloadReport(id, overrideScore, overrideVerdict) {
 }
 
 export async function getHistory() {
+  const local = getLocalHistory();
   try {
     const res = await api.get('/history');
     const data = res.data;
-    return Array.isArray(data) ? data : (data.items || []);
+    const backendItems = Array.isArray(data) ? data : (data.items || []);
+
+    // Merge backend and local history:
+    // This ensures video analyses (which live in local storage because
+    // the backend DB doesn't support them yet) show up in the History page.
+    const map = new Map();
+    
+    // Load local items first so their filename/file_type metadata is kept
+    local.forEach(item => map.set(item.id, item));
+    
+    // Overlap backend items (which are persistent), retaining filename if missing
+    backendItems.forEach(item => {
+      const existing = map.get(item.id) || {};
+      map.set(item.id, {
+        ...item,
+        filename: existing.filename || item.filename || 'Unknown File',
+        file_type: existing.file_type || item.file_type || 'image',
+      });
+    });
+
+    return Array.from(map.values()).sort((a, b) => new Date(b.created_at || 0) - new Date(a.created_at || 0));
   } catch {
-    // Fall back to locally cached history (works without a DB)
-    return getLocalHistory();
+    // Fall back to locally cached history if API fails
+    return local;
   }
 }
 
