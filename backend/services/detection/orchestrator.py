@@ -539,18 +539,6 @@ class DetectionOrchestrator:
         elapsed = round(time.time() - start, 2)
         logger.info(f"[{analysis_id}] Pipeline complete in {elapsed}s — AACS={aacs_score:.1f} ({verdict})")
 
-        # ---------- Build response matching frontend shape ----------
-        # Extract heartbeat data from PPS findings if available
-        heartbeat_data = {}
-        for f in pps_f:
-            if f.get("engine") == "rPPG-Heartbeat":
-                heartbeat_data = {
-                    "heart_rate": f.get("heart_rate", 0),
-                    "confidence": f.get("confidence", 0),
-                    "signal": f.get("signal", []),
-                }
-                break
-
         # ---------- Extract audio spectrum data from AAS findings ----------
         audio_spectrum_data = {}
         audio_signature_scores = {}
@@ -600,7 +588,6 @@ class DetectionOrchestrator:
             },
             "findings": all_findings,
             "forensics": forensics,
-            "ltca_data": getattr(self, "_last_ltca_data", {}),
             "ltca_data": ltca_data_payload,
             "heartbeat": heartbeat_data,
             "narrative": narrative,

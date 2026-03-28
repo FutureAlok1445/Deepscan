@@ -14,17 +14,27 @@ import io
 from fastapi import APIRouter, UploadFile, File, Request, HTTPException
 import time
 import uuid
-from fastapi import APIRouter, UploadFile, File, Request
 from fastapi.responses import JSONResponse
 from loguru import logger
 from backend.utils.rate_limiter import limiter
 from backend.utils.file_handler import save_upload_file, cleanup_file
 from backend.services.detection.orchestrator import orchestrator
+from backend.services.IMageDetector.orchestrator import image_orchestrator
 
 router = APIRouter()
 
 # In-memory results store (replace with MongoDB in production)
 results_store: dict = {}
+MAX_RESULTS_STORE = 1000
+FALLBACK_SUB_SCORES = {"mas": None, "pps": None, "irs": None, "aas": None, "cvs": None}
+
+
+def _store_result(result_id: str, payload: dict) -> None:
+    """Store result with a bounded in-memory size to avoid unbounded growth."""
+    results_store[result_id] = payload
+    while len(results_store) > MAX_RESULTS_STORE:
+        oldest_id = next(iter(results_store))
+        results_store.pop(oldest_id, None)
 
 
 # ═══════════════════════════════════════════════════════════════
@@ -110,7 +120,7 @@ async def analyze_file(request: Request, file: UploadFile = File(...)):
                 "score": 50.0,
                 "verdict": "Uncertain",
                 "confidence": 0.0,
-                "sub_scores": {"MAS": None, "PPS": None, "IRS": None, "AAS": None, "CVS": None},
+                "sub_scores": FALLBACK_SUB_SCORES.copy(),
                 "explanation": f"File upload failed: {str(e)}",
                 "gradcam_available": False,
                 "gradcam_base64": None,
@@ -134,7 +144,6 @@ async def analyze_file(request: Request, file: UploadFile = File(...)):
                     with open(self.path, "rb") as f:
                         return f.read()
 
-            from backend.services.IMageDetector.orchestrator import image_orchestrator
             res = await image_orchestrator.process_image(MockFile(file_path), context_caption=None)
 
             elapsed = int((time.time() - start_time) * 1000)
@@ -209,7 +218,7 @@ async def analyze_file(request: Request, file: UploadFile = File(...)):
 
         # ─── Sanitize & store ───
         result = _sanitize(result)
-        results_store[result["id"]] = result
+        _store_result(result["id"], result)
         return JSONResponse(content=result)
 
     except Exception as e:
@@ -224,7 +233,7 @@ async def analyze_file(request: Request, file: UploadFile = File(...)):
             "score": 50.0,
             "verdict": "Uncertain",
             "confidence": 0.0,
-            "sub_scores": {"MAS": None, "PPS": None, "IRS": None, "AAS": None, "CVS": None},
+            "sub_scores": FALLBACK_SUB_SCORES.copy(),
             "explanation": f"Analysis pipeline encountered an error: {str(e)[:200]}",
             "gradcam_available": False,
             "gradcam_base64": None,
@@ -236,7 +245,7 @@ async def analyze_file(request: Request, file: UploadFile = File(...)):
             "original_filename": getattr(file, "filename", "unknown"),
             "error": str(e)[:200],
         }
-        results_store[analysis_id] = error_result
+        _store_result(analysis_id, error_result)
         return JSONResponse(content=error_result)
 
     finally:

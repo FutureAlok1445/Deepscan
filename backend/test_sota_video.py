@@ -1,7 +1,7 @@
 import asyncio
 import sys, os
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-from services.detection.video.video_orchestrator import VideoOrchestrator
+from backend.services.detection.video.video_orchestrator import VideoOrchestrator
 
 async def test_sota():
     orch = VideoOrchestrator()

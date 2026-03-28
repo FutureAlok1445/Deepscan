@@ -9,3 +9,9 @@ venv/
 backend/venv/
 *.db
 backend/deepscan.db
+*.log
+*.bak
+*.tmp
+frontend/.vite/
+frontend/vite.config.js.timestamp-*.mjs
+backend_output.log
