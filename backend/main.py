@@ -16,6 +16,7 @@ from backend.config import settings
 from backend.api.v1.endpoints import (
     analyze, analyze_url, analyze_image, analyze_text, live_scan, history, report, community, webhook, feedback
 )
+from backend.services.context import deepfake_news_service
 from backend.services.detection.orchestrator import orchestrator
 from backend.services.IMageDetector.orchestrator import image_orchestrator
 from backend.utils.rate_limiter import limiter
@@ -80,7 +81,19 @@ async def lifespan(app: FastAPI):
     # ── Phase 3: Service validation ──
     await _validate_services()
 
+    # ── Phase 4: News feed refresh loop ──
+    try:
+        await deepfake_news_service.start()
+        logger.info("[STARTUP] Deepfake news refresh loop started ✓")
+    except Exception as e:
+        logger.warning(f"[STARTUP] News refresh loop failed to start: {e}")
+
     yield
+
+    try:
+        await deepfake_news_service.stop()
+    except Exception:
+        pass
     logger.info("Shutting down DeepScan API...")
 
 
@@ -117,6 +130,7 @@ async def _validate_services():
     # Check API keys
     results["huggingface_key"] = "OK" if settings.HF_API_TOKEN and not settings.HF_API_TOKEN.startswith("hf_...") else "NOT SET"
     results["groq_key"] = "OK" if settings.GROQ_API_KEY and not settings.GROQ_API_KEY.startswith("gsk_...") else "NOT SET"
+    results["news_api_key"] = "OK" if settings.NEWS_API_KEY else "NOT SET"
 
     # Log everything clearly
     logger.info("─" * 50)

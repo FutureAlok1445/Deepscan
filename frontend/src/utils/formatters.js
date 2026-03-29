@@ -44,6 +44,25 @@ export function formatDateTime(iso) {
   });
 }
 
+/* ISO string -> "2 hours ago" style */
+export function formatRelativeTime(iso) {
+  if (!iso) return '—';
+  const ts = new Date(iso).getTime();
+  if (Number.isNaN(ts)) return formatDateTime(iso);
+
+  const diffMs = Date.now() - ts;
+  const minute = 60 * 1000;
+  const hour = 60 * minute;
+  const day = 24 * hour;
+  const week = 7 * day;
+
+  if (diffMs < minute) return 'Just now';
+  if (diffMs < hour) return `${Math.floor(diffMs / minute)} min ago`;
+  if (diffMs < day) return `${Math.floor(diffMs / hour)} hour${Math.floor(diffMs / hour) === 1 ? '' : 's'} ago`;
+  if (diffMs < week) return `${Math.floor(diffMs / day)} day${Math.floor(diffMs / day) === 1 ? '' : 's'} ago`;
+  return formatDateTime(iso);
+}
+
 /* Score → tailwindish color name */
 export function getScoreColor(score) {
   if (score == null) return 'text-gray-400';
