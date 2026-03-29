@@ -1,8 +1,11 @@
 import time
 import uuid
-from fastapi import APIRouter
+from fastapi import APIRouter, Query, Request
 from pydantic import BaseModel
 from typing import Optional
+
+from backend.services.context import deepfake_news_service
+from backend.utils.rate_limiter import limiter
 
 router = APIRouter()
 
@@ -85,3 +88,27 @@ async def community_stats():
         "unverified_alerts": total - verified,
         "avg_trust_score": sum(a.get("trust_score", 0) for a in community_alerts) / max(total, 1),
     }
+
+
+@router.get("/news")
+async def list_deepfake_news(
+    tab: str = Query("all"),
+    search: str = Query("", max_length=80),
+    limit: int = Query(20, ge=1, le=100),
+    offset: int = Query(0, ge=0),
+):
+    """Return filtered deepfake news feed for community section."""
+    return deepfake_news_service.get_news(tab=tab, search=search, limit=limit, offset=offset)
+
+
+@router.get("/news/status")
+async def deepfake_news_status():
+    """Return live/stale state and refresh metadata for the news feed."""
+    return deepfake_news_service.get_status()
+
+
+@router.post("/news/refresh")
+@limiter.limit("5/minute")
+async def refresh_deepfake_news(request: Request):
+    """Manually trigger NewsData refresh for deepfake feed."""
+    return await deepfake_news_service.refresh_now(trigger="manual")
