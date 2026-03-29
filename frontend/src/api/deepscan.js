@@ -556,6 +556,73 @@ export async function getCommunityAlerts() {
   }
 }
 
+function normalizeNewsItem(item) {
+  const flags = Array.isArray(item?.category_flags) ? item.category_flags : [];
+  return {
+    article_id: item?.article_id || `news-${Math.random().toString(36).slice(2, 10)}`,
+    title: item?.title || 'Untitled article',
+    summary: item?.summary || 'Summary unavailable.',
+    source_name: item?.source_name || 'Unknown Source',
+    source_url: item?.source_url || '',
+    thumbnail_url: item?.thumbnail_url || '',
+    published_at: item?.published_at || null,
+    fetched_at: item?.fetched_at || null,
+    category_tag: item?.category_tag || 'AI Deepfakes',
+    category_flags: flags,
+    is_breaking: Boolean(item?.is_breaking),
+  };
+}
+
+export async function getDeepfakeNews({ tab = 'all', search = '', limit = 24, offset = 0 } = {}) {
+  try {
+    const res = await api.get('/community/news', { params: { tab, search, limit, offset } });
+    const payload = res.data || {};
+    const items = Array.isArray(payload.items) ? payload.items.map(normalizeNewsItem) : [];
+    return {
+      ...payload,
+      items,
+      breaking: payload.breaking ? normalizeNewsItem(payload.breaking) : null,
+      live: Boolean(payload.live),
+      stale: Boolean(payload.stale),
+      last_updated: payload.last_updated || null,
+      total: Number(payload.total || items.length),
+    };
+  } catch {
+    return {
+      items: [],
+      total: 0,
+      limit,
+      offset,
+      live: false,
+      stale: true,
+      last_updated: null,
+      breaking: null,
+    };
+  }
+}
+
+export async function refreshDeepfakeNews() {
+  try {
+    return (await api.post('/community/news/refresh')).data;
+  } catch {
+    return { ok: false, status: 'error', detail: 'refresh_failed' };
+  }
+}
+
+export async function getDeepfakeNewsStatus() {
+  try {
+    return (await api.get('/community/news/status')).data;
+  } catch {
+    return {
+      live: false,
+      stale: true,
+      stale_reason: 'status_unavailable',
+      article_count: 0,
+      last_updated: null,
+    };
+  }
+}
+
 export async function submitCommunityReport(url, note) {
   const res = await api.post('/community', {
     title: 'User Report: ' + (url || 'Unknown'),
